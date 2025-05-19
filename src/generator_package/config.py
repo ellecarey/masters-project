@@ -68,5 +68,5 @@ VISUALIZATION_SETTINGS = {
 }
 
 # --- Output Settings ---
-OUTPUT_DATA_PATH = "data/"
+OUTPUT_DATA_PATH = "data/dataset.csv"
 SAVE_PLOTS_DIR = "reports/figures/"
