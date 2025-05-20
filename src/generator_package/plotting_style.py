@@ -2,63 +2,67 @@ import matplotlib.pyplot as plt
 import warnings
 
 
-def apply_custom_plot_style():
+def apply_custom_plot_style(use_latex: bool = True):
     """
     Applies a consistent, publication-quality style to Matplotlib plots.
-    Includes settings for LaTeX rendering if available.
+    Includes settings for LaTeX rendering if available and requested.
+
+    Parameters:
+    -----------
+    use_latex (bool): Attempt to use LaTeX for text rendering. Defaults to True.
     """
 
-    # Reset the parameters to their defaults first to ensure a clean slate
     plt.rcParams.update(plt.rcParamsDefault)
 
-    try:
-        plt.rcParams["text.usetex"] = True
-        plt.rcParams["pgf.texsystem"] = "pdflatex"  # Specify the TeX system
-        # For LaTeX, a serif font like Computer Modern is standard and usually works best
-        plt.rcParams["font.family"] = "serif"
-        plt.rcParams["font.serif"] = [
-            "Computer Modern Roman"
-        ]  # Or 'Computer Modern Serif', 'CMU Serif' etc.
-        # pgf.rcfonts = False allows Matplotlib to handle fonts, which is often simpler
-        # unless you have very specific needs for pgf to control all fonts directly.
-        plt.rcParams["pgf.rcfonts"] = False
-        print("Matplotlib configured to use LaTeX for text rendering.")
-    except Exception as e:
-        print(
-            f"Note: LaTeX rendering for Matplotlib could not be enabled. Using default text rendering. Error: {e}"
-        )
-        plt.rcParams["text.usetex"] = False
-        plt.rcParams["font.family"] = (
-            "sans-serif"  # Fallback to sans-serif if LaTeX fails
-        )
+    can_use_latex = False
+    if use_latex:
+        try:
+            from matplotlib.texmanager import TexManager
 
-    # Define common parameters
+            if TexManager().check_availability():  # Basic check for LaTeX
+                plt.rcParams["text.usetex"] = True
+                plt.rcParams["pgf.texsystem"] = "pdflatex"
+                plt.rcParams["font.family"] = "serif"
+                plt.rcParams["font.serif"] = ["Computer Modern Roman"]
+                plt.rcParams["pgf.rcfonts"] = False
+                can_use_latex = True
+                print("Matplotlib configured to use LaTeX for text rendering.")
+            else:
+                print(
+                    "Warning: LaTeX installation not found or not fully functional. Falling back to default text rendering."
+                )
+        except Exception as e:
+            print(
+                f"Warning: Could not enable LaTeX for Matplotlib. Error: {e}. Falling back to default text rendering."
+            )
+
+    if not can_use_latex:
+        plt.rcParams["text.usetex"] = False
+        plt.rcParams["font.family"] = "sans-serif"
+
     params = {
         "ytick.color": "black",
         "xtick.color": "black",
         "axes.labelcolor": "black",
         "axes.edgecolor": "black",
-        "figure.titlesize": 20,
-        "axes.titlesize": 16,  # For individual subplot titles
-        "axes.labelsize": 14,  # For x and y labels
-        "xtick.labelsize": 14,  # For x-axis tick labels
-        "ytick.labelsize": 14,  # For y-axis tick labels
-        "figure.figsize": [
-            46.82 * 0.5 ** (0.5 * 6),
-            33.11 * 0.5 ** (0.5 * 6),
-        ],  # Specific figure size
+        "figure.titlesize": 20,  # For fig.suptitle()
+        "axes.titlesize": 16,  # For ax.set_title()
+        "axes.labelsize": 14,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": "medium",  # Added for better legend readability
+        "figure.figsize": [12, 7],  # Was [10, 7]
         "figure.dpi": 300,
+        # Add some default inter-subplot spacing; tight_layout can still override/refine this
+        "figure.subplot.wspace": 0.3,  # Width space between subplots
+        "figure.subplot.hspace": 0.3,  # Height space between subplots
     }
     plt.rcParams.update(params)
 
-    # Apply a base style sheet
     try:
         plt.style.use("seaborn-v0_8-whitegrid")
     except OSError:
-        print(
-            "Warning: 'seaborn-v0_8-whitegrid' style not found. Consider updating Matplotlib or using an available style."
-        )
-        # Fallback to a basic grid if the style is not found
+        print("Warning: 'seaborn-v0_8-whitegrid' style not found. Using basic grid.")
         plt.rcParams["axes.grid"] = True
 
     warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
