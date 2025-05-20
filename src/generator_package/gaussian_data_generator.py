@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
-from typing import List, Dict, Union, Tuple, Optional
-import random
+from typing import List, Dict, Optional
+import os
 
 
 class GuassianDataGenerator:
@@ -199,28 +199,37 @@ class GuassianDataGenerator:
         features: Optional[List[str]] = None,
         max_features_to_show: Optional[int] = 10,
         n_bins: int = 30,
+        save_to_dir: Optional[str] = None,
     ):
         """
-        Visualise the distribution of selected features.
+        Visualise the distribution of selected features and optionally save the figure.
         """
+        print(
+            f"DEBUG: visusalise_features called with save_to_dir='{save_to_dir}'"
+        )  # Added debug
+
         if self.data is None:
-            raise ValueError("No data generated. Call generate_features() first.")
+            print("No data generated to visualize.")
+            return
 
         if features is None:
             features_to_plot = self.data.columns.tolist()
+            if "target" in features_to_plot:
+                features_to_plot.remove("target")
+
             if (
                 max_features_to_show is not None
                 and len(features_to_plot) > max_features_to_show
             ):
                 print(
-                    f"Too many features to visualise. Showing first {max_features_to_show} out of {len(features_to_plot)}."
+                    f"Visualizing first {max_features_to_show} out of {len(features_to_plot)} features."
                 )
                 features_to_plot = features_to_plot[:max_features_to_show]
         else:
-            features_to_plot = features
+            features_to_plot = [f for f in features if f in self.data.columns]
 
         if not features_to_plot:
-            print("No features to visualise.")
+            print("No valid features selected or available to visualise.")
             return
 
         n_features_plot = len(features_to_plot)
@@ -228,22 +237,17 @@ class GuassianDataGenerator:
         n_rows = (n_features_plot + n_cols - 1) // n_cols
 
         fig, axes = plt.subplots(
-            n_rows, n_cols, figsize=(15, 4 * n_rows), squeeze=False
+            n_rows, n_cols, figsize=plt.rcParams.get("figure.figsize"), squeeze=False
         )
         axes = axes.flatten()
 
         for i, feature_name in enumerate(features_to_plot):
-            if feature_name not in self.data.columns:
-                print(
-                    f"Warning: Feature '{feature_name}' for visualization not found in data. Skipping."
-                )
-                axes[i].set_visible(False)  # Hide axis if feature doesn't exist
-                continue
-
             ax = axes[i]
-            self.data[feature_name].hist(bins=n_bins, ax=ax, alpha=0.7)
+            self.data[feature_name].hist(
+                bins=n_bins, ax=ax, alpha=0.7, color="skyblue", edgecolor="black"
+            )
             ax.set_title(
-                f"{feature_name} ({self.feature_types.get(feature_name, 'unknown')})"
+                f"{feature_name} ({self.feature_types.get(feature_name, 'N/A')})"
             )
             ax.axvline(
                 self.data[feature_name].mean(),
@@ -259,10 +263,47 @@ class GuassianDataGenerator:
             )
             ax.legend()
 
-        for i in range(n_features_plot, len(axes)):  # Hide unused subplots
+        for i in range(n_features_plot, len(axes)):
             axes[i].set_visible(False)
 
         plt.tight_layout()
+
+        # --- Save the figure if save_to_dir is provided ---
+        if save_to_dir:
+            print(
+                f"DEBUG: Attempting to save figure because save_to_dir is '{save_to_dir}'"
+            )  # Added debug
+            try:
+                # Convert to absolute path for clarity and robustness
+                absolute_save_dir = os.path.abspath(save_to_dir)
+                print(
+                    f"DEBUG: Absolute save directory resolved to: {absolute_save_dir}"
+                )
+
+                os.makedirs(
+                    absolute_save_dir,
+                    exist_ok=True,  # Use the absolute path
+                )
+
+                filename = "feature_distributions_plot.pdf"
+                full_save_path = os.path.join(
+                    absolute_save_dir, filename
+                )  # Use the absolute path
+
+                print(f"DEBUG: Attempting to save to absolute path: {full_save_path}")
+
+                fig.savefig(full_save_path, dpi=plt.rcParams.get("figure.dpi"))
+                print(
+                    f"Figure saved to: {full_save_path}"
+                )  # This will now print the absolute path
+            except Exception as e:
+                print(f"Error saving figure: {e}")
+        else:
+            print(
+                "DEBUG: Not saving figure because save_to_dir is None or empty."
+            )  # Added debug
+        # --- End of save block ---
+
         plt.show()
 
     def get_data(self) -> Optional[pd.DataFrame]:

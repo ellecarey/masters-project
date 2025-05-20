@@ -6,17 +6,18 @@ RANDOM_STATE = 42  # Seed for all random operations
 # --- Feature Generation (generate_features) ---
 # To define specific means, stds, and types for initial features.
 # If None, the generator will use its default random generation.
+FEATURE_PARAMETERS_OVERRIDE = None
 # Example:
 # FEATURE_PARAMETERS_OVERRIDE = {
 #     'feature_0': {'mean': 10, 'std': 1},
 #     'feature_1': {'mean': -5, 'std': 0.5}
 # }
+FEATURE_TYPES_OVERRIDE = None
+# Example:
 # FEATURE_TYPES_OVERRIDE = {
 #     'feature_0': 'discrete',
 #     'feature_1': 'continuous'
 # }
-FEATURE_PARAMETERS_OVERRIDE = None
-FEATURE_TYPES_OVERRIDE = None
 
 # --- Feature Perturbation (add_perturbations) ---
 # Set to None if no perturbation is needed
@@ -34,15 +35,8 @@ PERTURBATION_SETTINGS = {
 # Set to None if no new features are to be added after initial generation
 ADD_FEATURES_SETTINGS = {
     "n_new_features": 2,
-    # Optional: Define parameters and types for these new features
-    # 'feature_parameters': {
-    #     'new_feature_A': {'mean': 100, 'std': 10},
-    # },
-    # 'feature_types': {
-    #     'new_feature_A': 'discrete'
-    # }
-    "feature_parameters": None,
-    "feature_types": None,
+    "feature_parameters": None,  # Optional: Define parameters for new features
+    "feature_types": None,  # Optional: Define types for new features
 }
 # ADD_FEATURES_SETTINGS = None # Example: To skip adding features
 
@@ -69,4 +63,4 @@ VISUALIZATION_SETTINGS = {
 
 # --- Output Settings ---
 OUTPUT_DATA_PATH = "data/dataset.csv"
-SAVE_PLOTS_DIR = "reports/figures/"
+FIGURES_OUTPUT_DIR = "reports/figures/"
