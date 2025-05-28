@@ -10,10 +10,6 @@ from .plotting_style import apply_custom_plot_style
 from . import config
 from . import utils
 
-# Metadata
-__version__ = "1.0.0"
-__author__ = "Ellen Carey"
-
 __all__ = ["GuassianDataGenerator", "apply_custom_plot_style", "config", "utils"]
 
 
