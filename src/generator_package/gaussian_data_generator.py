@@ -9,17 +9,10 @@ import os
 class GuassianDataGenerator:
     """
     A class for generating random toy data with Gaussian distributions and controlled perturbations.
-
-    This class:
-    - generates data with a specified number of features
-    - controls wheter features are discrete or continuous
-    - adds controlled perturbations to the data
-    - visualises the generated data
+    All parameters must be explicitly specified by the user.
     """
 
-    def __init__(
-        self, n_samples: int = 1000, n_features: int = 10, random_state: int = 42
-    ):
+    def __init__(self, n_samples: int, n_features: int, random_state: int):
         """
         Initialise the GaussianDataGenerator.
 
@@ -36,46 +29,67 @@ class GuassianDataGenerator:
         self.feature_types: Dict[str, str] = {}
         self.feature_parameters: Dict[str, Dict] = {}
 
-        # Seed numpy for operations within this class instance
         np.random.seed(self.random_state)
-        # Note: Global random.seed and torch.manual_seed should be set in the main script if needed elsewhere
 
     def generate_features(
         self,
-        feature_parameters: Optional[Dict[str, Dict]] = None,
-        feature_types: Optional[Dict[str, str]] = None,
+        feature_parameters: Dict[str, Dict],
+        feature_types: Dict[str, str],
+        n_features_to_generate: Optional[int] = None,
     ):
         """
         Generate features based on specified parameters.
+
+        Parameters:
+        -----------
+        feature_parameters (Dict[str, Dict]): Parameters for each feature
+        feature_types (Dict[str, str]): Type specification for each feature
         """
+        # Count existing feature columns
         current_feature_count = 0
         if self.data is not None:
-            current_feature_count = len(self.data.columns)
+            feature_columns = [
+                col for col in self.data.columns if col.startswith("feature_")
+            ]
+            current_feature_count = len(feature_columns)
 
-        # If no parameters provided, generate default
-        if feature_parameters is None:
-            feature_parameters = {}
-            for i in range(self.n_features):
-                feature_name = f"feature_{current_feature_count + i}"
-                feature_parameters[feature_name] = {
-                    "mean": np.random.uniform(-5, 5),
-                    "std": np.random.uniform(0.5, 3),
-                }
+        # Use number of features provided in parameters if n_features_to_generate not specified
+        if n_features_to_generate is None:
+            n_features_to_generate = len(feature_parameters)
 
-        # If no types provided, default all to continuous
-        if feature_types is None:
-            feature_types = {}
-            for feature_name in feature_parameters.keys():
-                feature_types[feature_name] = "continuous"
+        # Validate that parameters are provided for all features
+        expected_features = [
+            f"feature_{current_feature_count + i}"
+            for i in range(n_features_to_generate)
+        ]
+
+        for feature_name in expected_features:
+            if feature_name not in feature_parameters:
+                raise ValueError(
+                    f"Parameters must be provided for feature: {feature_name}"
+                )
+            if feature_name not in feature_types:
+                raise ValueError(f"Type must be specified for feature: {feature_name}")
 
         self.feature_parameters.update(feature_parameters)
         self.feature_types.update(feature_types)
 
         data_dictionary = {}
         for feature_name, params in feature_parameters.items():
+            if "mean" not in params or "std" not in params:
+                raise ValueError(
+                    f"Both 'mean' and 'std' must be specified for {feature_name}"
+                )
+
             raw_data = np.random.normal(params["mean"], params["std"], self.n_samples)
+
             if self.feature_types.get(feature_name) == "discrete":
                 raw_data = np.round(raw_data)
+            elif self.feature_types.get(feature_name) != "continuous":
+                raise ValueError(
+                    f"Feature type must be 'continuous' or 'discrete' for {feature_name}"
+                )
+
             data_dictionary[feature_name] = raw_data
 
         new_data_df = pd.DataFrame(data_dictionary)
@@ -85,36 +99,38 @@ class GuassianDataGenerator:
         else:
             self.data = pd.concat([self.data, new_data_df], axis=1)
 
-        self.n_features = len(self.data.columns)  # Update total number of features
+        self.n_features = len(self.data.columns)
         print(f"Generated/added features. Total features: {self.n_features}")
-        print(f"Current feature parameters: {self.feature_parameters}")
         return self
 
     def add_perturbations(
         self,
-        perturbation_type: str = "gaussian",
-        features: Optional[List[str]] = None,
-        scale: float = 0.1,
+        perturbation_type: str,
+        features: List[str],
+        scale: float,
     ):
         """
         Add controlled perturbations to the data.
+
+        Parameters:
+        -----------
+        perturbation_type (str): Type of perturbation ('gaussian' or 'uniform')
+        features (List[str]): List of feature names to perturb
+        scale (float): Scale of the perturbation
         """
         if self.data is None:
             raise ValueError("No data generated. Call generate_features() first.")
 
-        if features is None:
-            features = self.data.columns.tolist()
+        if perturbation_type not in ["gaussian", "uniform"]:
+            raise ValueError("perturbation_type must be 'gaussian' or 'uniform'")
 
         perturbed_data = self.data.copy()
+
         for feature in features:
             if feature not in self.data.columns:
-                print(
-                    f"Warning: Feature '{feature}' not found for perturbation. Skipping."
-                )
-                continue
+                raise ValueError(f"Feature '{feature}' not found in data")
 
             if perturbation_type == "gaussian":
-                # Corrected from .stdd() to .std()
                 noise = np.random.normal(
                     0, scale * self.data[feature].std(), self.n_samples
                 )
@@ -125,8 +141,6 @@ class GuassianDataGenerator:
                     * self.data[feature].std()
                 )
                 perturbed_data[feature] += noise
-            else:
-                raise ValueError(f"Unknown perturbation type: {perturbation_type}")
 
             if self.feature_types.get(feature) == "discrete":
                 perturbed_data[feature] = np.round(perturbed_data[feature])
@@ -139,42 +153,78 @@ class GuassianDataGenerator:
 
     def add_features(
         self,
-        n_new_features: int = 1,
-        feature_parameters: Optional[Dict[str, Dict]] = None,
-        feature_types: Optional[Dict[str, str]] = None,
+        n_new_features: int,
+        feature_parameters: Dict[str, Dict],
+        feature_types: Dict[str, str],
     ):
         """
         Add new features to the existing dataset.
+
+        Parameters:
+        -----------
+        n_new_features (int): Number of new features to add
+        feature_parameters (Dict[str, Dict]): Parameters for new features
+        feature_types (Dict[str, str]): Types for new features
         """
-        if (
-            self.data is None and n_new_features > 0
-        ):  # If no data, treat this as initial generation
-            self.n_features = n_new_features  # Set total features for initial call
+        if self.data is None and n_new_features > 0:
+            self.n_features = n_new_features
             return self.generate_features(feature_parameters, feature_types)
 
         if n_new_features <= 0:
-            return self
+            raise ValueError("n_new_features must be greater than 0")
 
-        start_idx = len(self.data.columns) if self.data is not None else 0
+        # Calculate the correct starting index based on existing feature columns
+        existing_feature_columns = [
+            col for col in self.data.columns if col.startswith("feature_")
+        ]
+        start_idx = len(existing_feature_columns)
 
-        # Generate default parameters for new features if not provided
-        if feature_parameters is None:
-            feature_parameters = {}
-            for i in range(n_new_features):
-                feature_name = f"feature_{start_idx + i}"
-                feature_parameters[feature_name] = {
-                    "mean": np.random.uniform(-5, 5),
-                    "std": np.random.uniform(0.5, 3),
-                }
+        expected_features = [f"feature_{start_idx + i}" for i in range(n_new_features)]
 
-        # Generate default types for new features if not provided
-        if feature_types is None:
-            feature_types = {}
-            for feature_name in feature_parameters.keys():
-                feature_types[feature_name] = "continuous"
+        # Validate that all required parameters are provided
+        for feature_name in expected_features:
+            if feature_name not in feature_parameters:
+                raise ValueError(
+                    f"Parameters must be provided for new feature: {feature_name}"
+                )
+            if feature_name not in feature_types:
+                raise ValueError(
+                    f"Type must be specified for new feature: {feature_name}"
+                )
 
-        # Call generate_features to actually add them by passing only the new ones
-        self.generate_features(feature_parameters, feature_types)
+        # Extract only the parameters for the new features
+        new_feature_params = {
+            name: feature_parameters[name] for name in expected_features
+        }
+        new_feature_types = {name: feature_types[name] for name in expected_features}
+
+        # Generate new features directly using existing data structure
+        data_dictionary = {}
+        for feature_name, params in new_feature_params.items():
+            if "mean" not in params or "std" not in params:
+                raise ValueError(
+                    f"Both 'mean' and 'std' must be specified for {feature_name}"
+                )
+
+            raw_data = np.random.normal(params["mean"], params["std"], self.n_samples)
+
+            if new_feature_types.get(feature_name) == "discrete":
+                raw_data = np.round(raw_data)
+            elif new_feature_types.get(feature_name) != "continuous":
+                raise ValueError(
+                    f"Feature type must be 'continuous' or 'discrete' for {feature_name}"
+                )
+
+            data_dictionary[feature_name] = raw_data
+
+        # Add new features to existing data
+        for feature_name, feature_data in data_dictionary.items():
+            self.data[feature_name] = feature_data
+
+        # Update stored parameters and types
+        self.feature_parameters.update(new_feature_params)
+        self.feature_types.update(new_feature_types)
+
         print(f"Added {n_new_features} new features.")
         return self
 
@@ -184,53 +234,44 @@ class GuassianDataGenerator:
         """
         if self.data is None or feature_name not in self.data.columns:
             raise ValueError(f"Feature {feature_name} not found in the data.")
+
         if new_type not in ["continuous", "discrete"]:
-            raise ValueError("Invalid feature type. Use 'continuous' or 'discrete'.")
+            raise ValueError("new_type must be 'continuous' or 'discrete'")
 
         self.feature_types[feature_name] = new_type
+
         if new_type == "discrete":
             self.data[feature_name] = np.round(self.data[feature_name])
-        # If 'continuous', no change needed to data values unless they were previously discrete (which is fine)
+
         print(f"Changed type of '{feature_name}' to '{new_type}'.")
         return self
 
-    def visusalise_features(
+    def visualise_features(
         self,
-        features: Optional[List[str]] = None,
-        max_features_to_show: Optional[int] = 10,
-        n_bins: int = 30,
-        save_to_dir: Optional[str] = None,
+        features: List[str],
+        max_features_to_show: int,
+        n_bins: int,
+        save_to_dir: Optional[str],
     ):
         """
-        Visualise the distribution of selected features and optionally save the figure.
+        Visualise the distribution of selected features.
+
+        Parameters:
+        -----------
+        features (List[str]): List of feature names to visualize
+        max_features_to_show (int): Maximum number of features to display
+        n_bins (int): Number of bins for histograms
+        save_to_dir (Optional[str]): Directory to save figure (None to not save)
         """
-        print(
-            f"DEBUG: visusalise_features called with save_to_dir='{save_to_dir}'"
-        )  # Added debug
-
         if self.data is None:
-            print("No data generated to visualize.")
-            return
+            raise ValueError("No data generated to visualize.")
 
-        if features is None:
-            features_to_plot = self.data.columns.tolist()
-            if "target" in features_to_plot:
-                features_to_plot.remove("target")
+        # Validate features exist
+        invalid_features = [f for f in features if f not in self.data.columns]
+        if invalid_features:
+            raise ValueError(f"Features not found in data: {invalid_features}")
 
-            if (
-                max_features_to_show is not None
-                and len(features_to_plot) > max_features_to_show
-            ):
-                print(
-                    f"Visualizing first {max_features_to_show} out of {len(features_to_plot)} features."
-                )
-                features_to_plot = features_to_plot[:max_features_to_show]
-        else:
-            features_to_plot = [f for f in features if f in self.data.columns]
-
-        if not features_to_plot:
-            print("No valid features selected or available to visualise.")
-            return
+        features_to_plot = features[:max_features_to_show]
 
         n_features_plot = len(features_to_plot)
         n_cols = min(3, n_features_plot)
@@ -268,87 +309,51 @@ class GuassianDataGenerator:
 
         plt.tight_layout()
 
-        # --- Save the figure if save_to_dir is provided ---
-        if save_to_dir:
-            print(
-                f"DEBUG: Attempting to save figure because save_to_dir is '{save_to_dir}'"
-            )  # Added debug
+        if save_to_dir is not None:
             try:
-                # Convert to absolute path for clarity and robustness
                 absolute_save_dir = os.path.abspath(save_to_dir)
-                print(
-                    f"DEBUG: Absolute save directory resolved to: {absolute_save_dir}"
-                )
-
-                os.makedirs(
-                    absolute_save_dir,
-                    exist_ok=True,  # Use the absolute path
-                )
-
+                os.makedirs(absolute_save_dir, exist_ok=True)
                 filename = "feature_distributions_plot.pdf"
-                full_save_path = os.path.join(
-                    absolute_save_dir, filename
-                )  # Use the absolute path
-
-                print(f"DEBUG: Attempting to save to absolute path: {full_save_path}")
-
+                full_save_path = os.path.join(absolute_save_dir, filename)
                 fig.savefig(full_save_path, dpi=plt.rcParams.get("figure.dpi"))
-                print(
-                    f"Figure saved to: {full_save_path}"
-                )  # This will now print the absolute path
+                print(f"Figure saved to: {full_save_path}")
             except Exception as e:
                 print(f"Error saving figure: {e}")
-        else:
-            print(
-                "DEBUG: Not saving figure because save_to_dir is None or empty."
-            )  # Added debug
-        # --- End of save block ---
 
         plt.show()
 
-    def get_data(self) -> Optional[pd.DataFrame]:
-        """Get the generated data."""
-        return self.data
-
-    def get_feature_information(self) -> Dict:
-        """Get information about the features."""
-        return {
-            "feature_parameters": self.feature_parameters,
-            "feature_types": self.feature_types,
-        }
-
     def create_target_variable(
         self,
-        features_to_use: Optional[List[str]] = None,
-        weights: Optional[List[float]] = None,
-        noise_level: float = 0.1,
-        function_type: str = "linear",
+        features_to_use: List[str],
+        weights: List[float],
+        noise_level: float,
+        function_type: str,
     ):
         """
         Create a target variable based on the selected features.
+
+        Parameters:
+        -----------
+        features_to_use (List[str]): List of feature names to use
+        weights (List[float]): Weights for each feature
+        noise_level (float): Level of noise to add
+        function_type (str): Type of function ('linear', 'polynomial', or 'logistic')
         """
         if self.data is None:
             raise ValueError("No data generated. Call generate_features() first.")
 
-        if features_to_use is None:
-            features_to_use = [
-                col for col in self.data.columns if col != "target"
-            ]  # Exclude existing target
-
-        # Ensure all selected features exist
+        # Validate features exist
         missing_features = [f for f in features_to_use if f not in self.data.columns]
         if missing_features:
             raise ValueError(f"Features not found in data: {missing_features}")
 
-        if not features_to_use:
-            raise ValueError(
-                "No features specified or available to create a target variable."
-            )
-
-        if weights is None:
-            weights = np.random.uniform(-1, 1, len(features_to_use))
-        elif len(weights) != len(features_to_use):
+        if len(weights) != len(features_to_use):
             raise ValueError("Number of weights must match number of features to use.")
+
+        if function_type not in ["linear", "polynomial", "logistic"]:
+            raise ValueError(
+                "function_type must be 'linear', 'polynomial', or 'logistic'"
+            )
 
         X = self.data[features_to_use].values
         scaler = StandardScaler()
@@ -363,15 +368,9 @@ class GuassianDataGenerator:
         elif function_type == "logistic":
             logits = np.dot(X_scaled, weights)
             y = 1 / (1 + np.exp(-logits))
-            y = (y > 0.5).astype(int)  # Binary target
-        else:
-            raise ValueError(
-                "Invalid function type. Use 'linear', 'polynomial', or 'logistic'."
-            )
+            y = (y > 0.5).astype(int)
 
-        if (
-            function_type != "logistic"
-        ):  # Add noise only if not logistic (which is already binary)
+        if function_type != "logistic":
             noise = np.random.normal(0, noise_level, self.n_samples)
             y += noise
 
@@ -380,3 +379,14 @@ class GuassianDataGenerator:
             f"Created 'target' variable using function '{function_type}' based on features: {features_to_use}"
         )
         return self
+
+    def get_data(self) -> Optional[pd.DataFrame]:
+        """Get the generated data."""
+        return self.data
+
+    def get_feature_information(self) -> Dict:
+        """Get information about the features."""
+        return {
+            "feature_parameters": self.feature_parameters,
+            "feature_types": self.feature_types,
+        }
