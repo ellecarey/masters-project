@@ -1,12 +1,10 @@
 import random
 import numpy as np
 import torch
-
+import os
 from generator_package import config
 from generator_package.gaussian_data_generator import GuassianDataGenerator
-from generator_package.plotting_style import (
-    apply_custom_plot_style,
-)
+from generator_package.plotting_style import apply_custom_plot_style
 
 
 def run_data_generation():
@@ -29,113 +27,200 @@ def run_data_generation():
     print("--- Initializing GuassianDataGenerator ---")
     generator = GuassianDataGenerator(
         n_samples=config.N_SAMPLES,
-        n_features=config.N_INITIAL_FEATURES,  # Initial number of features for the first call
+        n_features=config.N_INITIAL_FEATURES,
         random_state=config.RANDOM_STATE,
     )
 
     # --- 1. Generate Initial Features ---
     print("\n--- Generating Initial Features ---")
-    generator.generate_features(
-        feature_parameters=config.FEATURE_PARAMETERS_OVERRIDE,
-        feature_types=config.FEATURE_TYPES_OVERRIDE,
-    )
-    print("Initial data head:")
-    if generator.get_data() is not None:
-        print(generator.get_data().head())
+    try:
+        generator.generate_features(
+            feature_parameters=config.FEATURE_PARAMETERS_OVERRIDE,
+            feature_types=config.FEATURE_TYPES_OVERRIDE,
+        )
+        print("Initial data head:")
+        if generator.get_data() is not None:
+            print(generator.get_data().head())
+    except Exception as e:
+        print(f"Error generating initial features: {e}")
+        return
 
     # --- 2. Add Perturbations (Optional) ---
-    if config.PERTURBATION_SETTINGS:
+    if hasattr(config, "PERTURBATION_SETTINGS") and config.PERTURBATION_SETTINGS:
         print("\n--- Adding Perturbations ---")
-        generator.add_perturbations(
-            perturbation_type=config.PERTURBATION_SETTINGS["perturbation_type"],
-            features=config.PERTURBATION_SETTINGS.get(
-                "features_to_perturb"
-            ),  # Use .get for safety
-            scale=config.PERTURBATION_SETTINGS["scale"],
-        )
-        print("Data head after perturbations:")
-        if generator.get_data() is not None:
-            print(generator.get_data().head())
+        try:
+            # Validate required parameters exist
+            required_keys = ["perturbation_type", "features_to_perturb", "scale"]
+            if all(key in config.PERTURBATION_SETTINGS for key in required_keys):
+                generator.add_perturbations(
+                    perturbation_type=config.PERTURBATION_SETTINGS["perturbation_type"],
+                    features=config.PERTURBATION_SETTINGS["features_to_perturb"],
+                    scale=config.PERTURBATION_SETTINGS["scale"],
+                )
+                print("Data head after perturbations:")
+                if generator.get_data() is not None:
+                    print(generator.get_data().head())
+            else:
+                print("Skipping perturbations: Missing required parameters in config")
+        except Exception as e:
+            print(f"Error adding perturbations: {e}")
 
     # --- 3. Add More Features (Optional) ---
-    if config.ADD_FEATURES_SETTINGS:
+    if hasattr(config, "ADD_FEATURES_SETTINGS") and config.ADD_FEATURES_SETTINGS:
         print("\n--- Adding New Features ---")
-        generator.add_features(
-            n_new_features=config.ADD_FEATURES_SETTINGS.get("n_new_features", 0),
-            feature_parameters=config.ADD_FEATURES_SETTINGS.get("feature_parameters"),
-            feature_types=config.ADD_FEATURES_SETTINGS.get("feature_types"),
-        )
-        print("Data head after adding new features:")
-        if generator.get_data() is not None:
-            print(generator.get_data().head())
+        try:
+            # Validate required parameters exist
+            required_keys = ["n_new_features", "feature_parameters", "feature_types"]
+            if all(key in config.ADD_FEATURES_SETTINGS for key in required_keys):
+                generator.add_features(
+                    n_new_features=config.ADD_FEATURES_SETTINGS["n_new_features"],
+                    feature_parameters=config.ADD_FEATURES_SETTINGS[
+                        "feature_parameters"
+                    ],
+                    feature_types=config.ADD_FEATURES_SETTINGS["feature_types"],
+                )
+                print("Data head after adding new features:")
+                if generator.get_data() is not None:
+                    print(generator.get_data().head())
+            else:
+                print("Skipping add features: Missing required parameters in config")
+        except Exception as e:
+            print(f"Error adding new features: {e}")
 
     # --- 4. Create Target Variable (Optional) ---
-    if config.CREATE_TARGET_SETTINGS:
+    if hasattr(config, "CREATE_TARGET_SETTINGS") and config.CREATE_TARGET_SETTINGS:
         print("\n--- Creating Target Variable ---")
-        features_for_target = config.CREATE_TARGET_SETTINGS.get("features_to_use")
-
-        # Robust check for features_for_target
-        current_data = generator.get_data()
-        if current_data is not None:
-            available_features = [
-                col for col in current_data.columns if col != "target"
+        try:
+            # Validate required parameters exist
+            required_keys = [
+                "features_to_use",
+                "weights",
+                "noise_level",
+                "function_type",
             ]
-            if features_for_target is None and available_features:
-                features_for_target = available_features[
-                    : min(3, len(available_features))
-                ]  # Default to first 3
-            elif features_for_target:  # if specified, ensure they exist
-                features_for_target = [
-                    f for f in features_for_target if f in available_features
-                ]
+            if all(key in config.CREATE_TARGET_SETTINGS for key in required_keys):
+                features_for_target = config.CREATE_TARGET_SETTINGS["features_to_use"]
 
-            if features_for_target:  # Proceed only if we have valid features for target
-                generator.create_target_variable(
-                    features_to_use=features_for_target,
-                    weights=config.CREATE_TARGET_SETTINGS.get("weights"),
-                    noise_level=config.CREATE_TARGET_SETTINGS.get("noise_level", 0.1),
-                    function_type=config.CREATE_TARGET_SETTINGS.get(
-                        "function_type", "linear"
-                    ),
-                )
-                print("Data head after creating target variable:")
-                print(generator.get_data().head())
+                # Robust check for features_for_target
+                current_data = generator.get_data()
+                if current_data is not None:
+                    available_features = [
+                        col for col in current_data.columns if col != "target"
+                    ]
+
+                    # Validate that specified features exist
+                    valid_features = [
+                        f for f in features_for_target if f in available_features
+                    ]
+
+                    if valid_features and len(valid_features) == len(
+                        features_for_target
+                    ):
+                        generator.create_target_variable(
+                            features_to_use=config.CREATE_TARGET_SETTINGS[
+                                "features_to_use"
+                            ],
+                            weights=config.CREATE_TARGET_SETTINGS["weights"],
+                            noise_level=config.CREATE_TARGET_SETTINGS["noise_level"],
+                            function_type=config.CREATE_TARGET_SETTINGS[
+                                "function_type"
+                            ],
+                        )
+                        print("Data head after creating target variable:")
+                        print(generator.get_data().head())
+                    else:
+                        print(
+                            f"Skipping target creation: Invalid features specified. Available: {available_features}"
+                        )
+                else:
+                    print("Skipping target creation: No data available.")
             else:
-                print("Skipping target creation: No valid features_to_use for target.")
-        else:
-            print("Skipping target creation: No data available.")
+                print("Skipping target creation: Missing required parameters in config")
+        except Exception as e:
+            print(f"Error creating target variable: {e}")
 
     # --- 5. Visualize Features ---
     print("\n--- Visualizing Features ---")
     if generator.get_data() is not None:
-        figures_dir_to_save = None
-        if hasattr(config, "FIGURES_OUTPUT_DIR") and config.FIGURES_OUTPUT_DIR:
-            figures_dir_to_save = config.FIGURES_OUTPUT_DIR
+        try:
+            # Validate required visualization parameters
+            if (
+                hasattr(config, "VISUALIZATION_SETTINGS")
+                and config.VISUALIZATION_SETTINGS
+                and all(
+                    key in config.VISUALIZATION_SETTINGS
+                    for key in [
+                        "features_to_visualise",
+                        "max_features_to_show",
+                        "n_bins",
+                    ]
+                )
+            ):
+                figures_dir_to_save = config.VISUALIZATION_SETTINGS.get("save_to_dir")
+                if hasattr(config, "FIGURES_OUTPUT_DIR") and config.FIGURES_OUTPUT_DIR:
+                    figures_dir_to_save = config.FIGURES_OUTPUT_DIR
+                    print(f"Saving figures to directory: {figures_dir_to_save}")
 
-        print(f"Saving figures to directory: {figures_dir_to_save}")
-        generator.visusalise_features(
-            features=config.VISUALIZATION_SETTINGS.get("features_to_visualise"),
-            max_features_to_show=config.VISUALIZATION_SETTINGS.get(
-                "max_features_to_show", 10
-            ),
-            n_bins=config.VISUALIZATION_SETTINGS.get("n_bins", 30),
-            save_to_dir=figures_dir_to_save,
-        )
+                # Validate that specified features exist
+                current_data = generator.get_data()
+                available_features = list(current_data.columns)
+                specified_features = config.VISUALIZATION_SETTINGS[
+                    "features_to_visualise"
+                ]
+                valid_features = [
+                    f for f in specified_features if f in available_features
+                ]
+
+                if valid_features:
+                    generator.visualise_features(
+                        features=valid_features,
+                        max_features_to_show=config.VISUALIZATION_SETTINGS[
+                            "max_features_to_show"
+                        ],
+                        n_bins=config.VISUALIZATION_SETTINGS["n_bins"],
+                        save_to_dir=figures_dir_to_save,
+                    )
+                else:
+                    print(
+                        f"No valid features to visualize. Available: {available_features}"
+                    )
+            else:
+                print("Skipping visualization: Missing required parameters in config")
+        except Exception as e:
+            print(f"Error during visualization: {e}")
     else:
         print("No data to visualize.")
 
     # --- 6. Display Feature Information ---
     print("\n--- Final Feature Information ---")
-    print(generator.get_feature_information())
+    try:
+        print(generator.get_feature_information())
+    except Exception as e:
+        print(f"Error getting feature information: {e}")
 
     # --- Save Data ---
-    if hasattr(config, "OUTPUT_DATA_PATH") and config.OUTPUT_DATA_PATH:
-        if generator.get_data() is not None:
-            try:
-                generator.get_data().to_csv(config.OUTPUT_DATA_PATH, index=False)
-                print(f"\nGenerated data saved to {config.OUTPUT_DATA_PATH}")
-            except Exception as e:
-                print(f"Error saving data: {e}")
+    if generator.get_data() is not None:
+        try:
+            # Debug: Print the paths
+            print(f"Config PROJECT_ROOT: {config.PROJECT_ROOT}")
+            print(f"Config OUTPUT_DATA_PATH: {config.OUTPUT_DATA_PATH}")
+
+            # Use the path from config
+            output_path = config.OUTPUT_DATA_PATH
+
+            # Create directory if it doesn't exist
+            import os
+
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                print(f"Creating directory: {output_dir}")
+                os.makedirs(output_dir, exist_ok=True)
+                print(f"Directory created/exists: {output_dir}")
+
+            generator.get_data().to_csv(output_path, index=False)
+            print(f"\nGenerated data saved to {output_path}")
+        except Exception as e:
+            print(f"Error saving data: {e}")
 
 
 if __name__ == "__main__":
