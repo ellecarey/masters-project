@@ -94,3 +94,6 @@ target/
 
 # exclude data from source control by default
 # /data/
+
+# repomix file
+repomix-output.xml

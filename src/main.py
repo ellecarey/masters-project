@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import os
 from generator_package import config
-from generator_package.gaussian_data_generator import GuassianDataGenerator
+from generator_package.gaussian_data_generator import GaussianDataGenerator
 from generator_package.plotting_style import apply_custom_plot_style
 
 
@@ -24,8 +24,8 @@ def run_data_generation():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(config.RANDOM_STATE)
 
-    print("--- Initializing GuassianDataGenerator ---")
-    generator = GuassianDataGenerator(
+    print("--- Initializing GaussianDataGenerator ---")
+    generator = GaussianDataGenerator(
         n_samples=config.N_SAMPLES,
         n_features=config.N_INITIAL_FEATURES,
         random_state=config.RANDOM_STATE,
