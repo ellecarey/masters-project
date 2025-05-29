@@ -6,7 +6,7 @@ from typing import List, Dict, Optional
 import os
 
 
-class GuassianDataGenerator:
+class GaussianDataGenerator:
     """
     A class for generating random toy data with Gaussian distributions and controlled perturbations.
     All parameters must be explicitly specified by the user.

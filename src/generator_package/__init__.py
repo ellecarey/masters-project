@@ -5,7 +5,7 @@ This package provides tools for generating synthetic datasets with Gaussian dist
 controlled perturbations, and customisable visualisations.
 """
 
-from .gaussian_data_generator import GuassianDataGenerator
+from .gaussian_data_generator import GaussianDataGenerator
 from .plotting_style import apply_custom_plot_style
 from . import config
 from . import utils
