@@ -19,7 +19,20 @@ def apply_custom_plot_style(use_latex: bool = True):
         try:
             from matplotlib.texmanager import TexManager
 
-            if TexManager().check_availability():  # Basic check for LaTeX
+            # Updated LaTeX availability check
+            tex_manager = TexManager()
+            # Try a different method to check LaTeX availability
+            if hasattr(tex_manager, "latex_available"):
+                latex_available = tex_manager.latex_available
+            else:
+                # Fallback: try to create a simple LaTeX expression
+                try:
+                    tex_manager.make_tex("test", 12)
+                    latex_available = True
+                except:
+                    latex_available = False
+
+            if latex_available:
                 plt.rcParams["text.usetex"] = True
                 plt.rcParams["pgf.texsystem"] = "pdflatex"
                 plt.rcParams["font.family"] = "serif"
@@ -39,23 +52,25 @@ def apply_custom_plot_style(use_latex: bool = True):
     if not can_use_latex:
         plt.rcParams["text.usetex"] = False
         plt.rcParams["font.family"] = "sans-serif"
+        # Add PDF-compatible settings
+        plt.rcParams["pdf.fonttype"] = 42
+        plt.rcParams["ps.fonttype"] = 42
 
     params = {
         "ytick.color": "black",
         "xtick.color": "black",
         "axes.labelcolor": "black",
         "axes.edgecolor": "black",
-        "figure.titlesize": 20,  # For fig.suptitle()
-        "axes.titlesize": 16,  # For ax.set_title()
+        "figure.titlesize": 20,
+        "axes.titlesize": 16,
         "axes.labelsize": 14,
         "xtick.labelsize": 14,
         "ytick.labelsize": 14,
-        "legend.fontsize": "medium",  # Added for better legend readability
-        "figure.figsize": [12, 7],  # Was [10, 7]
+        "legend.fontsize": "medium",
+        "figure.figsize": [12, 7],
         "figure.dpi": 300,
-        # Add some default inter-subplot spacing; tight_layout can still override/refine this
-        "figure.subplot.wspace": 0.3,  # Width space between subplots
-        "figure.subplot.hspace": 0.3,  # Height space between subplots
+        "figure.subplot.wspace": 0.3,
+        "figure.subplot.hspace": 0.3,
     }
     plt.rcParams.update(params)
 

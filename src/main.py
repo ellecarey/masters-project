@@ -24,7 +24,7 @@ def run_data_generation():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(config.RANDOM_STATE)
 
-    print("--- Initializing GaussianDataGenerator ---")
+    print("--- Initialising GaussianDataGenerator ---")
     generator = GaussianDataGenerator(
         n_samples=config.N_SAMPLES,
         n_features=config.N_INITIAL_FEATURES,
@@ -139,16 +139,16 @@ def run_data_generation():
         except Exception as e:
             print(f"Error creating target variable: {e}")
 
-    # --- 5. Visualize Features ---
-    print("\n--- Visualizing Features ---")
+    # --- 5. Visualise Features ---
+    print("\n--- Visualising Features ---")
     if generator.get_data() is not None:
         try:
-            # Validate required visualization parameters
+            # Validate required visualisation parameters
             if (
-                hasattr(config, "VISUALIZATION_SETTINGS")
-                and config.VISUALIZATION_SETTINGS
+                hasattr(config, "VISUALISATION_SETTINGS")
+                and config.VISUALISATION_SETTINGS
                 and all(
-                    key in config.VISUALIZATION_SETTINGS
+                    key in config.VISUALISATION_SETTINGS
                     for key in [
                         "features_to_visualise",
                         "max_features_to_show",
@@ -156,7 +156,7 @@ def run_data_generation():
                     ]
                 )
             ):
-                figures_dir_to_save = config.VISUALIZATION_SETTINGS.get("save_to_dir")
+                figures_dir_to_save = config.VISUALISATION_SETTINGS.get("save_to_dir")
                 if hasattr(config, "FIGURES_OUTPUT_DIR") and config.FIGURES_OUTPUT_DIR:
                     figures_dir_to_save = config.FIGURES_OUTPUT_DIR
                     print(f"Saving figures to directory: {figures_dir_to_save}")
@@ -164,7 +164,7 @@ def run_data_generation():
                 # Validate that specified features exist
                 current_data = generator.get_data()
                 available_features = list(current_data.columns)
-                specified_features = config.VISUALIZATION_SETTINGS[
+                specified_features = config.VISUALISATION_SETTINGS[
                     "features_to_visualise"
                 ]
                 valid_features = [
@@ -174,22 +174,22 @@ def run_data_generation():
                 if valid_features:
                     generator.visualise_features(
                         features=valid_features,
-                        max_features_to_show=config.VISUALIZATION_SETTINGS[
+                        max_features_to_show=config.VISUALISATION_SETTINGS[
                             "max_features_to_show"
                         ],
-                        n_bins=config.VISUALIZATION_SETTINGS["n_bins"],
+                        n_bins=config.VISUALISATION_SETTINGS["n_bins"],
                         save_to_dir=figures_dir_to_save,
                     )
                 else:
                     print(
-                        f"No valid features to visualize. Available: {available_features}"
+                        f"No valid features to visualise. Available: {available_features}"
                     )
             else:
-                print("Skipping visualization: Missing required parameters in config")
+                print("Skipping visualisation: Missing required parameters in config")
         except Exception as e:
-            print(f"Error during visualization: {e}")
+            print(f"Error during visualisation: {e}")
     else:
-        print("No data to visualize.")
+        print("No data to visualise.")
 
     # --- 6. Display Feature Information ---
     print("\n--- Final Feature Information ---")

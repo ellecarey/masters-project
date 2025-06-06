@@ -52,8 +52,8 @@ CREATE_TARGET_SETTINGS = {
     "function_type": "polynomial",  # Must be 'linear', 'polynomial', or 'logistic'
 }
 
-# --- Visualization Settings (visualise_features) ---
-VISUALIZATION_SETTINGS = {
+# --- Visualisation Settings (visualise_features) ---
+VISUALISATION_SETTINGS = {
     "features_to_visualise": ["feature_0", "feature_1", "feature_2", "feature_3"],
     "max_features_to_show": 6,
     "n_bins": 25,
