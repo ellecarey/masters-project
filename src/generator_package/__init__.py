@@ -10,7 +10,7 @@ from .plotting_style import apply_custom_plot_style
 from . import config
 from . import utils
 
-__all__ = ["GuassianDataGenerator", "apply_custom_plot_style", "config", "utils"]
+__all__ = ["GaussianDataGenerator", "apply_custom_plot_style", "config", "utils"]
 
 
 def _initialise_package():
