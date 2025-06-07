@@ -97,3 +97,5 @@ target/
 
 # repomix file
 repomix-output.xml
+repomix-output.txt
+.repomix/
