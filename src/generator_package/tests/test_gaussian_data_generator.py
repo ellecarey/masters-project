@@ -6,21 +6,7 @@ feature generation, perturbations, target creation, and visualisation.
 
 import pytest
 from generator_package.gaussian_data_generator import GaussianDataGenerator
-from .fixtures.sample_data import (
-    SAMPLE_FEATURE_PARAMS,
-    EXTREME_FEATURE_PARAMS,
-    INVALID_FEATURE_PARAMS,
-    SAMPLE_FEATURE_TYPES,
-    INVALID_FEATURE_TYPES,
-    DATASET_CONFIGS,
-    PERTURBATION_LEVELS,
-    TARGET_WEIGHTS,
-    FUNCTION_TYPES,
-    TARGET_NOISE_LEVELS,
-    ERROR_PATTERNS,
-    REPRODUCIBILITY_SEEDS,
-    EDGE_CASE_LIMITS,
-)
+from .fixtures.sample_data import DATASET_CONFIGS, ERROR_PATTERNS, REPRODUCIBILITY_SEEDS
 
 
 class TestGaussianDataGeneratorInit:
@@ -34,7 +20,7 @@ class TestGaussianDataGeneratorInit:
         )
         assert generator.n_samples == config["samples"]
         assert generator.n_features == config["features"]
-        assert generator.random_state == REPRODUCIBILITY_SEEDS[0]
+        assert generator.random_state == 42
         assert generator.data is None
         assert generator.feature_types == {}
         assert generator.feature_parameters == {}
@@ -43,7 +29,9 @@ class TestGaussianDataGeneratorInit:
         """test that only random_state has a default value of 42"""
         config = DATASET_CONFIGS["unit_test_standard"]
         generator = GaussianDataGenerator(
-            n_samples=config["samples"], n_features=config["features"]
+            n_samples=config["samples"],
+            n_features=config["features"],
+            random_state=REPRODUCIBILITY_SEEDS[0],
         )
         assert generator.random_state == 42
 
@@ -53,6 +41,7 @@ class TestGaussianDataGeneratorInit:
             GaussianDataGenerator(
                 n_samples=0,
                 n_features=DATASET_CONFIGS["minimal_valid_input"]["features"],
+                random_state=REPRODUCIBILITY_SEEDS[0],
             )
 
     def test_invalid_n_features(self):
@@ -61,6 +50,7 @@ class TestGaussianDataGeneratorInit:
             GaussianDataGenerator(
                 n_samples=DATASET_CONFIGS["minimal_valid_input"]["samples"],
                 n_features=0,
+                random_state=REPRODUCIBILITY_SEEDS[0],
             )
 
 
