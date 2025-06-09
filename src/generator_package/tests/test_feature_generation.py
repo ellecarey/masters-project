@@ -15,29 +15,38 @@ from .fixtures.sample_data import (
 
 
 class TestFeatureGeneration:
-    def test_generate_features_with_sample_params(self):
-        """Test feature generation using predefined sample parameters with statistical confidence"""
-        config = DATASET_CONFIGS["unit_test_standard"]
-        generator = GaussianDataGenerator(
-            n_samples=config["samples"],
-            n_features=len(SAMPLE_FEATURE_PARAMS),
-            random_state=REPRODUCIBILITY_SEEDS[0],
-        )
-
-        generator.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
-
-        # Verify data structure matches fixture configurations
+    def validate_basic_structure(
+        self, generator, expected_samples, expected_features, expected_columns
+    ):
+        """Helper method to validate basic data structure"""
         assert generator.data is not None
-        assert generator.data.shape == (config["samples"], len(SAMPLE_FEATURE_PARAMS))
-        assert list(generator.data.columns) == list(SAMPLE_FEATURE_PARAMS.keys())
+        assert generator.data.shape == (expected_samples, expected_features)
+        assert list(generator.data.columns) == expected_columns
 
-        # Verify feature parameters are stored exactly as provided
+    def validate_parameter_storage(self, generator):
+        """Helper method to validate parameter storage"""
         assert generator.feature_parameters == SAMPLE_FEATURE_PARAMS
         assert generator.feature_types == SAMPLE_FEATURE_TYPES
 
+    def test_generate_features_with_sample_params(
+        self, generator_with_sample_data, standard_test_config
+    ):
+        """Test feature generation using predefined sample parameters with statistical confidence"""
+
+        # Validate basic structure
+        self.validate_basic_structure(
+            generator_with_sample_data,
+            100,  # From generator_with_sample_data fixture
+            len(SAMPLE_FEATURE_PARAMS),
+            list(SAMPLE_FEATURE_PARAMS.keys()),
+        )
+
+        # Validate parameter storage
+        self.validate_parameter_storage(generator_with_sample_data)
+
         # Check feature distributions with statistical confidence intervals
         for feature_name, params in SAMPLE_FEATURE_PARAMS.items():
-            feature_data = generator.data[feature_name]
+            feature_data = generator_with_sample_data.data[feature_name]
             n_samples = len(feature_data)
 
             # Calculate standard errors for mean and std
