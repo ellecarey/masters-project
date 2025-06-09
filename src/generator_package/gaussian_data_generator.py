@@ -37,9 +37,12 @@ class GaussianDataGenerator:
     ):
         """Generate features based on specified parameters."""
 
-        # Add validation calls
+        # validation calls
         DataGeneratorValidators.validate_feature_parameters(feature_parameters)
         DataGeneratorValidators.validate_feature_types(feature_types)
+
+        # Create random number generator from the instance's random state
+        rng = np.random.RandomState(self.random_state)
 
         # Count existing feature columns
         current_feature_count = 0
@@ -60,9 +63,7 @@ class GaussianDataGenerator:
                 break
 
             # Generate feature data
-            feature_data = np.random.normal(
-                params["mean"], params["std"], self.n_samples
-            )
+            feature_data = rng.normal(params["mean"], params["std"], self.n_samples)
 
             # Apply feature type
             feature_type = feature_types.get(feature_name, "continuous")

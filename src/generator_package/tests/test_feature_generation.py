@@ -4,6 +4,8 @@ Tests for feature generation functionality with specific parameter configuration
 
 import pytest
 import numpy as np
+import pandas as pd
+
 from generator_package.gaussian_data_generator import GaussianDataGenerator
 from .fixtures.sample_data import (
     SAMPLE_FEATURE_PARAMS,
@@ -98,3 +100,42 @@ class TestFeatureGeneration:
             assert all_integers, (
                 f"Discrete feature {feature} contains non-integer values"
             )
+
+    def test_reproducibility_with_specific_seeds(self, standard_test_config):
+        """Test reproducibility using exact REPRODUCIBILITY_SEEDS"""
+        seed = REPRODUCIBILITY_SEEDS[1]
+
+        # Create generators right when we need them
+        gen1 = GaussianDataGenerator(
+            n_samples=standard_test_config["samples"],
+            n_features=len(SAMPLE_FEATURE_PARAMS),
+            random_state=seed,
+        )
+        gen2 = GaussianDataGenerator(
+            n_samples=standard_test_config["samples"],
+            n_features=len(SAMPLE_FEATURE_PARAMS),
+            random_state=seed,
+        )
+
+        # Generate data immediately
+        gen1.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
+        gen2.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
+
+        # Data should be identical
+        pd.testing.assert_frame_equal(gen1.data, gen2.data)
+
+    def test_reproducibility_debug(self, standard_test_config):
+        """Debug reproducibility issues"""
+        seed = REPRODUCIBILITY_SEEDS[1]
+
+        gen1 = GaussianDataGenerator(
+            n_samples=standard_test_config["samples"],
+            n_features=len(SAMPLE_FEATURE_PARAMS),
+            random_state=seed,
+        )
+
+        # Check if the generator is properly seeded
+        print(f"Gen1 random_state: {gen1.random_state}")
+
+        gen1.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
+        print(f"Gen1 first few values: {gen1.data.iloc[:5, 0].tolist()}")
