@@ -60,3 +60,41 @@ class TestFeatureGeneration:
             assert abs(feature_data.std() - params["std"]) < 3 * se_std, (
                 f"Std for {feature_name} outside expected range: {feature_data.std():.3f} vs {params['std']:.3f}"
             )
+
+    def test_continuous_vs_discrete_features_from_fixtures(
+        self, generator_with_sample_data
+    ):
+        """Test continuous vs discrete handling using SAMPLE_FEATURE_TYPES"""
+
+        # Test continuous features from actual fixture data
+        continuous_features = [
+            name
+            for name, ftype in SAMPLE_FEATURE_TYPES.items()
+            if ftype == "continuous"
+        ]
+
+        # Ensure testing actual continuous features
+        assert len(continuous_features) > 0, (
+            "No continuous features found in SAMPLE_FEATURE_TYPES"
+        )
+
+        for feature in continuous_features:
+            feature_data = generator_with_sample_data.data[feature]
+            # Continuous features should have decimal places
+            has_decimals = any(not float(val).is_integer() for val in feature_data)
+            assert has_decimals, (
+                f"Continuous feature {feature} should contain decimal values"
+            )
+
+        # Test discrete features from actual fixture data
+        discrete_features = [
+            name for name, ftype in SAMPLE_FEATURE_TYPES.items() if ftype == "discrete"
+        ]
+
+        for feature in discrete_features:
+            feature_data = generator_with_sample_data.data[feature]
+            # Discrete features should be integers after generation
+            all_integers = all(float(val).is_integer() for val in feature_data)
+            assert all_integers, (
+                f"Discrete feature {feature} contains non-integer values"
+            )
