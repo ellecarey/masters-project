@@ -121,5 +121,14 @@ def large_dataset():
         n_features=config["features"],
         random_state=REPRODUCIBILITY_SEEDS[0],
     )
-    gen.generate_features()
+
+    # Create default parameters for the larger dataset
+    default_params = {}
+    default_types = {}
+    for i in range(config["features"]):
+        feature_name = f"feature_{i}"
+        default_params[feature_name] = {"mean": 0.0, "std": 1.0}
+        default_types[feature_name] = "continuous"
+
+    gen.generate_features(default_params, default_types)
     return gen
