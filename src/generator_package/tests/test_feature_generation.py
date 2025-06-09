@@ -105,7 +105,7 @@ class TestFeatureGeneration:
         """Test reproducibility using exact REPRODUCIBILITY_SEEDS"""
         seed = REPRODUCIBILITY_SEEDS[1]
 
-        # Create generators right when we need them
+        # Create generators as needed
         gen1 = GaussianDataGenerator(
             n_samples=standard_test_config["samples"],
             n_features=len(SAMPLE_FEATURE_PARAMS),
@@ -117,25 +117,36 @@ class TestFeatureGeneration:
             random_state=seed,
         )
 
-        # Generate data immediately
+        # Generate data
         gen1.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
         gen2.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
 
-        # Data should be identical
+        # check data is identical
         pd.testing.assert_frame_equal(gen1.data, gen2.data)
 
-    def test_reproducibility_debug(self, standard_test_config):
-        """Debug reproducibility issues"""
-        seed = REPRODUCIBILITY_SEEDS[1]
+        def test_different_seeds_from_fixtures_produce_different_data(
+            self, different_seed_generators
+        ):
+            """Test different seeds from REPRODUCIBILITY_SEEDS produce different datasets"""
+            gen1, gen2 = different_seed_generators
 
-        gen1 = GaussianDataGenerator(
-            n_samples=standard_test_config["samples"],
-            n_features=len(SAMPLE_FEATURE_PARAMS),
-            random_state=seed,
-        )
+            # Generate data with different seeds
+            gen1.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
+            gen2.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
 
-        # Check if the generator is properly seeded
-        print(f"Gen1 random_state: {gen1.random_state}")
+            # Data should be different with different seeds
+            assert not gen1.data.equals(gen2.data), (
+                "Different seeds should produce different data"
+            )
 
-        gen1.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
-        print(f"Gen1 first few values: {gen1.data.iloc[:5, 0].tolist()}")
+            # check tructure and parameters are the same
+            assert gen1.data.shape == gen2.data.shape
+            assert list(gen1.data.columns) == list(gen2.data.columns)
+            assert gen1.feature_parameters == gen2.feature_parameters
+            assert gen1.feature_types == gen2.feature_types
+
+            # Verify some values are different
+            differences = (gen1.data != gen2.data).sum().sum()
+            assert differences > 0, (
+                "Expected some differences between datasets with different seeds"
+            )
