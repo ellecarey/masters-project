@@ -148,16 +148,17 @@ class GaussianDataGenerator:
     ):
         """Add controlled perturbations to the data."""
 
-        # Add validation call
+        # validation
         DataGeneratorValidators.validate_perturbation_parameters(
             perturbation_type, features, scale, self.data
         )
+        rng = np.random.RandomState(self.random_state)
 
         for feature in features:
             if perturbation_type == "gaussian":
-                noise = np.random.normal(0, scale, self.n_samples)
+                noise = rng.normal(0, scale, self.n_samples)
             elif perturbation_type == "uniform":
-                noise = np.random.uniform(-scale, scale, self.n_samples)
+                noise = rng.uniform(-scale, scale, self.n_samples)
 
             self.data[feature] += noise
 
