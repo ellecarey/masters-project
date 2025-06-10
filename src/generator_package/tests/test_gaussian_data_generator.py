@@ -52,14 +52,3 @@ class TestGaussianDataGeneratorInit:
                 n_features=0,
                 random_state=REPRODUCIBILITY_SEEDS[0],
             )
-
-
-# class TestFeatureGeneration:
-
-# class TestPerturbations:
-
-# class TestTargetVariable:
-
-# class TestVisualisation:
-
-# class TestEdgeCases

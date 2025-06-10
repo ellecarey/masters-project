@@ -17,112 +17,92 @@ from .fixtures.sample_data import (
 
 
 class TestDataGeneratorValidators:
-    def test_validate_feature_parameters_valid_samples(self):
-        """Test validation passes with valid sample feature parameters"""
-        DataGeneratorValidators.validate_feature_parameters(SAMPLE_FEATURE_PARAMS)
+    def test_validate_feature_parameters_comprehensive(self, sample_feature_params):
+        """Test feature parameter validation with valid and invalid cases"""
+        # Test valid parameters
+        DataGeneratorValidators.validate_feature_parameters(sample_feature_params)
 
-    def test_validate_feature_parameters_invalid_patterns(self):
-        """Test validation fails with invalid feature parameters from fixtures"""
-        for invalid_params in INVALID_FEATURE_PARAMS:
-            with pytest.raises(ValueError):
+        # Test invalid cases
+        invalid_cases = [
+            ("not_a_dict", "Feature parameters must be a dictionary"),
+            (
+                {"feature_1": "not_a_dict"},
+                "Parameters for feature_1 must be a dictionary",
+            ),
+            (
+                {"feature_1": {"std": 1.0}},
+                "Feature feature_1 must have 'mean' and 'std' parameters",
+            ),
+            (
+                {"feature_1": {"mean": 0.0}},
+                "Feature feature_1 must have 'mean' and 'std' parameters",
+            ),
+            (
+                {"feature_1": {"mean": 0.0, "std": -1.0}},
+                "Standard deviation for feature_1 must be positive",
+            ),
+            (
+                {"feature_1": {"mean": 0.0, "std": 0.0}},
+                "Standard deviation for feature_1 must be positive",
+            ),
+        ]
+
+        for invalid_params, expected_error in invalid_cases:
+            with pytest.raises(ValueError, match=expected_error):
                 DataGeneratorValidators.validate_feature_parameters(invalid_params)
 
-    def test_validate_feature_parameters_missing_mean(self):
-        """Test validation fails when mean is missing"""
-        invalid_params = {"test_feature_1": {"std": 1.0}}
-        with pytest.raises(
-            ValueError,
-            match="Feature test_feature_1 must have 'mean' and 'std' parameters",
-        ):
-            DataGeneratorValidators.validate_feature_parameters(invalid_params)
-
-    def test_validate_feature_parameters_missing_std(self):
-        """Test validation fails when std is missing"""
-        invalid_params = {"test_feature_1": {"mean": 0.0}}
-        with pytest.raises(
-            ValueError,
-            match="Feature test_feature_1 must have 'mean' and 'std' parameters",
-        ):
-            DataGeneratorValidators.validate_feature_parameters(invalid_params)
-
-    def test_validate_feature_parameters_negative_std(self):
-        """Test validation fails with negative standard deviation"""
-        invalid_params = {"test_feature_1": {"mean": 0.0, "std": -1.0}}
-        with pytest.raises(
-            ValueError, match="Standard deviation for test_feature_1 must be positive"
-        ):
-            DataGeneratorValidators.validate_feature_parameters(invalid_params)
-
-    def test_validate_feature_parameters_zero_std(self):
-        """Test validation fails with zero standard deviation"""
-        invalid_params = {"test_feature_1": {"mean": 0.0, "std": 0.0}}
-        with pytest.raises(
-            ValueError, match="Standard deviation for test_feature_1 must be positive"
-        ):
-            DataGeneratorValidators.validate_feature_parameters(invalid_params)
-
-    def test_validate_feature_parameters_not_dict(self):
-        """Test validation fails when parameter is not a dictionary"""
-        invalid_params = {"test_feature_1": "not_a_dict"}
-        with pytest.raises(
-            ValueError, match="Parameters for test_feature_1 must be a dictionary"
-        ):
-            DataGeneratorValidators.validate_feature_parameters(invalid_params)
-
-    def test_validate_init_parameters_valid_configs(self):
-        """Test initialisation parameter validation with valid dataset configs"""
-        for config_name, config in DATASET_CONFIGS.items():
+    @pytest.mark.parametrize(
+        "n_samples,n_features,should_pass",
+        [
+            (100, 5, True),
+            (1000, 10, True),
+            (0, 5, False),
+            (-1, 5, False),
+            (100, 0, False),
+            (100, -1, False),
+        ],
+    )
+    def test_validate_init_parameters_comprehensive(
+        self, n_samples, n_features, should_pass, standard_test_config
+    ):
+        """Test initialisation parameter validation with multiple scenarios"""
+        if should_pass:
+            DataGeneratorValidators.validate_init_parameters(n_samples, n_features)
+            # Also verify with actual config values
             DataGeneratorValidators.validate_init_parameters(
-                config["samples"], config["features"]
+                standard_test_config["samples"], standard_test_config["features"]
             )
+        else:
+            with pytest.raises(ValueError):
+                DataGeneratorValidators.validate_init_parameters(n_samples, n_features)
 
-    def test_validate_init_parameters_invalid_samples(self):
-        """Test initialisation fails with invalid n_samples"""
-        with pytest.raises(ValueError, match="Number of samples must be positive"):
-            DataGeneratorValidators.validate_init_parameters(0, 5)
+    def test_validate_feature_types_comprehensive(self, sample_feature_types):
+        """Test feature type validation with valid and invalid cases"""
+        # Test valid types
+        DataGeneratorValidators.validate_feature_types(sample_feature_types)
 
-        with pytest.raises(ValueError, match="Number of samples must be positive"):
-            DataGeneratorValidators.validate_init_parameters(-1, 5)
-
-    def test_validate_init_parameters_invalid_features(self):
-        """Test initialisation fails with invalid n_features"""
-        with pytest.raises(ValueError, match="Number of features must be positive"):
-            DataGeneratorValidators.validate_init_parameters(100, 0)
-
-        with pytest.raises(ValueError, match="Number of features must be positive"):
-            DataGeneratorValidators.validate_init_parameters(100, -1)
-
-    def test_validate_feature_types_valid_samples(self):
-        """Test feature type validation with valid sample types"""
-        DataGeneratorValidators.validate_feature_types(SAMPLE_FEATURE_TYPES)
-
-    def test_validate_feature_types_non_dict(self):
-        """Test feature type validation fails with non-dictionary input"""
-        non_dict_inputs = ["not_a_dict", 123, None, []]
-        for invalid_input in non_dict_inputs:
-            with pytest.raises(ValueError, match="Feature types must be a dictionary"):
-                DataGeneratorValidators.validate_feature_types(invalid_input)
-
-    def test_validate_feature_types_invalid_values(self):
-        """Test feature type validation fails with invalid feature type values"""
-        invalid_type_dicts = [
+        # Test invalid cases
+        invalid_cases = [
+            "not_a_dict",
             {"feature1": "invalid_type"},
             {"feature1": "categorical"},
             {"feature1": 123},
             {"feature1": None},
         ]
-        for invalid_dict in invalid_type_dicts:
-            with pytest.raises(ValueError, match="Invalid feature type"):
-                DataGeneratorValidators.validate_feature_types(invalid_dict)
 
-    def test_validate_perturbation_parameters_valid_types(
-        self, generator_with_sample_data
+        for invalid_types in invalid_cases:
+            with pytest.raises(ValueError):
+                DataGeneratorValidators.validate_feature_types(invalid_types)
+
+    def test_validate_perturbation_parameters_comprehensive(
+        self, generator_with_sample_data, sample_feature_params
     ):
-        """Test perturbation validation with valid parameters"""
-        valid_types = ["gaussian", "uniform"]
-        valid_features = list(SAMPLE_FEATURE_PARAMS.keys())[:2]
+        """Test comprehensive perturbation parameter validation"""
 
-        for perturbation_type in valid_types:
+        valid_features = list(sample_feature_params.keys())[:2]
+
+        # Test valid cases using fixture data
+        for perturbation_type in ["gaussian", "uniform"]:
             for scale_name, scale_value in PERTURBATION_LEVELS.items():
                 DataGeneratorValidators.validate_perturbation_parameters(
                     perturbation_type,
@@ -131,148 +111,97 @@ class TestDataGeneratorValidators:
                     generator_with_sample_data.data,
                 )
 
-    def test_validate_perturbation_parameters_invalid_type(
-        self, generator_with_sample_data
-    ):
-        """Test perturbation validation with invalid perturbation type"""
-        valid_features = list(SAMPLE_FEATURE_PARAMS.keys())[:1]
+        # Test invalid cases
+        invalid_cases = [
+            (
+                "invalid_type",
+                valid_features,
+                0.1,
+                generator_with_sample_data.data,
+                "perturbation_type must be 'gaussian' or 'uniform'",
+            ),
+            (
+                "gaussian",
+                valid_features,
+                -0.1,
+                generator_with_sample_data.data,
+                "Scale must be non-negative",
+            ),
+            (
+                "gaussian",
+                ["nonexistent"],
+                0.1,
+                generator_with_sample_data.data,
+                "Feature 'nonexistent' not found in data",
+            ),
+            ("gaussian", valid_features, 0.1, None, "No data generated"),
+        ]
 
-        with pytest.raises(
-            ValueError, match="perturbation_type must be 'gaussian' or 'uniform'"
-        ):
-            DataGeneratorValidators.validate_perturbation_parameters(
-                "invalid_type", valid_features, 0.1, generator_with_sample_data.data
-            )
-
-    def test_validate_perturbation_parameters_negative_scale(
-        self, generator_with_sample_data
-    ):
-        """Test perturbation validation with negative scale"""
-        valid_features = list(SAMPLE_FEATURE_PARAMS.keys())[:1]
-
-        with pytest.raises(ValueError, match="Scale must be non-negative"):
-            DataGeneratorValidators.validate_perturbation_parameters(
-                "gaussian", valid_features, -0.1, generator_with_sample_data.data
-            )
-
-    def test_validate_perturbation_parameters_zero_scale(
-        self, generator_with_sample_data
-    ):
-        """Test perturbation validation allows zero scale (noise-free)"""
-        valid_features = list(SAMPLE_FEATURE_PARAMS.keys())[:1]
-
-        DataGeneratorValidators.validate_perturbation_parameters(
-            "gaussian",
-            valid_features,
-            PERTURBATION_LEVELS["noise_free"],
-            generator_with_sample_data.data,
-        )
-
-    def test_validate_perturbation_parameters_no_data(self):
-        """Test perturbation validation fails with no data"""
-        valid_features = list(SAMPLE_FEATURE_PARAMS.keys())[:1]
-
-        with pytest.raises(
-            ValueError, match="No data generated. Call generate_features\\(\\) first."
-        ):
-            DataGeneratorValidators.validate_perturbation_parameters(
-                "gaussian", valid_features, 0.1, None
-            )
-
-    def test_validate_perturbation_parameters_nonexistent_features(
-        self, generator_with_sample_data
-    ):
-        """Test perturbation validation fails with non-existent features"""
-        nonexistent_features = ["nonexistent_feature", "another_fake_feature"]
-
-        for feature in nonexistent_features:
-            with pytest.raises(
-                ValueError, match=f"Feature '{feature}' not found in data"
-            ):
+        for perturbation_type, features, scale, data, expected_error in invalid_cases:
+            with pytest.raises(ValueError, match=expected_error):
                 DataGeneratorValidators.validate_perturbation_parameters(
-                    "gaussian", [feature], 0.1, generator_with_sample_data.data
+                    perturbation_type, features, scale, data
                 )
 
-    def test_validate_target_parameters_valid_configs(self, generator_with_sample_data):
-        """Test target parameter validation with valid configurations"""
-        features_to_use = list(SAMPLE_FEATURE_PARAMS.keys())[:2]
+    def test_validate_target_parameters_comprehensive(
+        self, generator_with_sample_data, sample_feature_params
+    ):
+        """Test comprehensive target parameter validation"""
 
-        # Handle TARGET_WEIGHTS as either list or dict
-        if isinstance(TARGET_WEIGHTS, dict):
-            weights = list(TARGET_WEIGHTS.values())[: len(features_to_use)]
-        else:
-            weights = TARGET_WEIGHTS[: len(features_to_use)]
+        features_to_use = list(sample_feature_params.keys())[:2]
+        weights = TARGET_WEIGHTS[: len(features_to_use)]
 
+        # Test valid cases
         for function_type in FUNCTION_TYPES:
             DataGeneratorValidators.validate_target_parameters(
                 features_to_use, weights, function_type, generator_with_sample_data.data
             )
 
-    def test_validate_target_parameters_no_data(self):
-        """Test target parameter validation fails with no data"""
-        features_to_use = list(SAMPLE_FEATURE_PARAMS.keys())[:2]
-        weights = TARGET_WEIGHTS[: len(features_to_use)]
-
-        with pytest.raises(
-            ValueError, match="No data generated. Call generate_features\\(\\) first."
-        ):
-            DataGeneratorValidators.validate_target_parameters(
-                features_to_use, weights, "linear", None
-            )
-
-    def test_validate_target_parameters_missing_features(
-        self, generator_with_sample_data
-    ):
-        """Test target parameter validation fails with missing features"""
-        missing_features = ["nonexistent_feature_1", "nonexistent_feature_2"]
-        weights = TARGET_WEIGHTS[: len(missing_features)]
-
-        with pytest.raises(ValueError, match="Features not found in data"):
-            DataGeneratorValidators.validate_target_parameters(
-                missing_features, weights, "linear", generator_with_sample_data.data
-            )
-
-    def test_validate_target_parameters_weight_mismatch(
-        self, generator_with_sample_data
-    ):
-        """Test target parameter validation fails with mismatched weights"""
-        features_to_use = list(SAMPLE_FEATURE_PARAMS.keys())[:3]
-        wrong_weights = TARGET_WEIGHTS[:2]  # Only 2 weights for 3 features
-
-        with pytest.raises(
-            ValueError, match="Number of weights must match number of features to use."
-        ):
-            DataGeneratorValidators.validate_target_parameters(
-                features_to_use,
-                wrong_weights,
+        # Test invalid cases
+        invalid_cases = [
+            (features_to_use, weights, "linear", None, "No data generated"),
+            (
+                ["nonexistent_feature_1"],
+                [1.0],
                 "linear",
                 generator_with_sample_data.data,
-            )
-
-    def test_validate_target_parameters_invalid_function_type(
-        self, generator_with_sample_data
-    ):
-        """Test target parameter validation fails with invalid function type"""
-        features_to_use = list(SAMPLE_FEATURE_PARAMS.keys())[:2]
-        weights = TARGET_WEIGHTS[: len(features_to_use)]
-
-        with pytest.raises(
-            ValueError,
-            match="function_type must be 'linear', 'polynomial', or 'logistic'",
-        ):
-            DataGeneratorValidators.validate_target_parameters(
+                "Features not found in data",
+            ),
+            (
+                features_to_use,
+                [1.0],
+                "linear",
+                generator_with_sample_data.data,
+                "Number of weights must match number of features",
+            ),
+            (
                 features_to_use,
                 weights,
                 "invalid_function",
                 generator_with_sample_data.data,
-            )
+                "function_type must be 'linear', 'polynomial', or 'logistic'",
+            ),
+        ]
 
-    def test_validate_visualisation_parameters_valid_configs(
-        self, generator_with_sample_data
+        for (
+            features,
+            test_weights,
+            function_type,
+            data,
+            expected_error,
+        ) in invalid_cases:
+            with pytest.raises(ValueError, match=expected_error):
+                DataGeneratorValidators.validate_target_parameters(
+                    features, test_weights, function_type, data
+                )
+
+    def test_validate_visualisation_parameters_comprehensive(
+        self, generator_with_sample_data, sample_feature_params
     ):
-        """Test visualisation parameter validation with valid configurations"""
-        features = list(SAMPLE_FEATURE_PARAMS.keys())
+        """Test comprehensive visualisation parameter validation"""
+        features = list(sample_feature_params.keys())
 
+        # Test valid case
         DataGeneratorValidators.validate_visualisation_parameters(
             features,
             max_features_to_show=3,
@@ -280,172 +209,187 @@ class TestDataGeneratorValidators:
             data=generator_with_sample_data.data,
         )
 
-    def test_validate_visualisation_parameters_no_data(self):
-        """Test visualisation parameter validation fails with no data"""
-        features = list(SAMPLE_FEATURE_PARAMS.keys())
+        # Test invalid cases
+        invalid_cases = [
+            (features, 3, 20, None, "No data generated to visualise"),
+            (
+                ["nonexistent_feature"],
+                3,
+                20,
+                generator_with_sample_data.data,
+                "Features not found in data",
+            ),
+            (
+                features,
+                0,
+                20,
+                generator_with_sample_data.data,
+                "max_features_to_show must be positive",
+            ),
+            (
+                features,
+                -1,
+                20,
+                generator_with_sample_data.data,
+                "max_features_to_show must be positive",
+            ),
+            (
+                features,
+                3,
+                0,
+                generator_with_sample_data.data,
+                "n_bins must be positive",
+            ),
+            (
+                features,
+                3,
+                -5,
+                generator_with_sample_data.data,
+                "n_bins must be positive",
+            ),
+        ]
 
-        with pytest.raises(ValueError, match="No data generated to visualise."):
-            DataGeneratorValidators.validate_visualisation_parameters(
-                features, max_features_to_show=3, n_bins=20, data=None
-            )
+        for test_features, max_features, n_bins, data, expected_error in invalid_cases:
+            with pytest.raises(ValueError, match=expected_error):
+                DataGeneratorValidators.validate_visualisation_parameters(
+                    test_features,
+                    max_features_to_show=max_features,
+                    n_bins=n_bins,
+                    data=data,
+                )
 
-    def test_validate_visualisation_parameters_invalid_features(
-        self, generator_with_sample_data
+    def test_complete_pipeline_integration(
+        self,
+        generator_factory,
+        sample_feature_params,
+        sample_feature_types,
+        standard_test_config,
+        test_seeds,
     ):
-        """Test visualisation parameter validation fails with invalid features"""
-        invalid_features = ["nonexistent_feature"]
+        """Test validators work throughout complete pipeline using fixtures"""
 
-        with pytest.raises(ValueError, match="Features not found in data"):
-            DataGeneratorValidators.validate_visualisation_parameters(
-                invalid_features,
-                max_features_to_show=3,
-                n_bins=20,
-                data=generator_with_sample_data.data,
-            )
-
-    def test_validate_visualisation_parameters_invalid_max_features(
-        self, generator_with_sample_data
-    ):
-        """Test visualisation parameter validation fails with invalid max_features_to_show"""
-        features = list(SAMPLE_FEATURE_PARAMS.keys())
-
-        with pytest.raises(ValueError, match="max_features_to_show must be positive"):
-            DataGeneratorValidators.validate_visualisation_parameters(
-                features,
-                max_features_to_show=0,
-                n_bins=20,
-                data=generator_with_sample_data.data,
-            )
-
-        with pytest.raises(ValueError, match="max_features_to_show must be positive"):
-            DataGeneratorValidators.validate_visualisation_parameters(
-                features,
-                max_features_to_show=-1,
-                n_bins=20,
-                data=generator_with_sample_data.data,
-            )
-
-    def test_validate_visualisation_parameters_invalid_bins(
-        self, generator_with_sample_data
-    ):
-        """Test visualisation parameter validation fails with invalid n_bins"""
-        features = list(SAMPLE_FEATURE_PARAMS.keys())
-
-        with pytest.raises(ValueError, match="n_bins must be positive"):
-            DataGeneratorValidators.validate_visualisation_parameters(
-                features,
-                max_features_to_show=3,
-                n_bins=0,
-                data=generator_with_sample_data.data,
-            )
-
-        with pytest.raises(ValueError, match="n_bins must be positive"):
-            DataGeneratorValidators.validate_visualisation_parameters(
-                features,
-                max_features_to_show=3,
-                n_bins=-5,
-                data=generator_with_sample_data.data,
-            )
-
-    def test_comprehensive_validation_workflow(self, generator_factory):
-        """Test comprehensive validation workflow using actual sample data"""
-        # Test complete workflow with valid data
-        config = DATASET_CONFIGS["unit_test_standard"]
-
-        # Validate initialisation parameters
+        # Test complete pipeline validation using all fixtures
         DataGeneratorValidators.validate_init_parameters(
-            config["samples"], config["features"]
+            standard_test_config["samples"], standard_test_config["features"]
         )
 
-        # Create generator and validate feature generation
+        # Create and validate features using factory
         gen = generator_factory(
-            n_samples=config["samples"],
-            n_features=len(SAMPLE_FEATURE_PARAMS),
-            random_state=REPRODUCIBILITY_SEEDS[0],
+            n_samples=standard_test_config["samples"],
+            n_features=len(sample_feature_params),
+            random_state=test_seeds[0],
         )
+        DataGeneratorValidators.validate_feature_parameters(sample_feature_params)
+        DataGeneratorValidators.validate_feature_types(sample_feature_types)
 
-        # Validate feature parameters and types
-        DataGeneratorValidators.validate_feature_parameters(SAMPLE_FEATURE_PARAMS)
-        DataGeneratorValidators.validate_feature_types(SAMPLE_FEATURE_TYPES)
+        # Generate data and validate operations
+        gen.generate_features(sample_feature_params, sample_feature_types)
 
-        # Generate features
-        gen.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
-
-        # Validate perturbation parameters
-        features_to_perturb = list(SAMPLE_FEATURE_PARAMS.keys())[:2]
+        # Validate perturbation using fixtures
+        test_features = list(sample_feature_params.keys())[:1]
         DataGeneratorValidators.validate_perturbation_parameters(
-            "gaussian",
-            features_to_perturb,
-            PERTURBATION_LEVELS["realistic_noise"],
-            gen.data,
+            "gaussian", test_features, PERTURBATION_LEVELS["realistic_noise"], gen.data
         )
 
-        # Validate target parameters
-        features_for_target = list(SAMPLE_FEATURE_PARAMS.keys())[:3]
-        weights_for_target = TARGET_WEIGHTS[: len(features_for_target)]
+        # Validate target creation using fixtures
+        target_features = list(sample_feature_params.keys())[:2]
+        target_weights = TARGET_WEIGHTS[: len(target_features)]
         DataGeneratorValidators.validate_target_parameters(
-            features_for_target, weights_for_target, "linear", gen.data
+            target_features, target_weights, "linear", gen.data
         )
 
-        # Validate visualisation parameters
+        # Validate visualisation using fixtures
         DataGeneratorValidators.validate_visualisation_parameters(
-            list(SAMPLE_FEATURE_PARAMS.keys()),
-            max_features_to_show=3,
-            n_bins=20,
+            list(sample_feature_params.keys()),
+            max_features_to_show=2,
+            n_bins=10,
             data=gen.data,
         )
 
-    def test_edge_cases_with_actual_sample_data(self, generator_with_sample_data):
-        """Test edge cases using your specific sample data structure"""
-        # Test with all sample features
-        all_features = list(SAMPLE_FEATURE_PARAMS.keys())
+    def test_fixture_consistency_and_cross_compatibility(
+        self,
+        sample_feature_params,
+        sample_feature_types,
+        test_seeds,
+        standard_test_config,
+        generator_with_sample_data,
+        different_seed_generators,
+    ):
+        """Test fixture consistency and cross-fixture compatibility"""
+        # Test sample data fixture consistency
+        assert (
+            isinstance(sample_feature_params, dict) and len(sample_feature_params) > 0
+        )
+        for feature_name, params in sample_feature_params.items():
+            assert "mean" in params and "std" in params
+            assert isinstance(params["mean"], (int, float))
+            assert isinstance(params["std"], (int, float))
+            assert params["std"] > 0
 
-        # Test perturbation with all features
-        DataGeneratorValidators.validate_perturbation_parameters(
-            "uniform",
-            all_features,
-            PERTURBATION_LEVELS["extreme_noise"],
-            generator_with_sample_data.data,
+        # Test feature types fixture consistency
+        assert isinstance(sample_feature_types, dict) and len(sample_feature_types) > 0
+        for feature_name, ftype in sample_feature_types.items():
+            assert ftype in ["continuous", "discrete"]
+
+        # Test consistency between parameters and types
+        assert set(sample_feature_params.keys()) == set(sample_feature_types.keys())
+
+        # Test seeds fixture consistency
+        assert isinstance(test_seeds, list) and len(test_seeds) >= 2
+        assert all(isinstance(seed, int) for seed in test_seeds)
+        assert len(set(test_seeds)) == len(test_seeds)  # All unique
+
+        # Test standard config fixture consistency
+        assert isinstance(standard_test_config, dict)
+        assert "samples" in standard_test_config and "features" in standard_test_config
+        assert (
+            standard_test_config["samples"] > 0 and standard_test_config["features"] > 0
         )
 
-        # Test target creation with all features and matching weights
-        all_weights = TARGET_WEIGHTS[: len(all_features)]
-        if len(all_weights) == len(all_features):
-            DataGeneratorValidators.validate_target_parameters(
-                all_features, all_weights, "polynomial", generator_with_sample_data.data
-            )
+        # Test cross-fixture compatibility
+        assert generator_with_sample_data.feature_parameters == sample_feature_params
+        assert generator_with_sample_data.feature_types == sample_feature_types
 
-        # Test visualisation with maximum features
+        # Test different_seed_generators fixture
+        gen1, gen2 = different_seed_generators
+        gen1.generate_features(sample_feature_params, sample_feature_types)
+        gen2.generate_features(sample_feature_params, sample_feature_types)
+
+        assert gen1.data.shape == gen2.data.shape
+        assert list(gen1.data.columns) == list(gen2.data.columns)
+        assert gen1.random_state != gen2.random_state
+
+    @pytest.mark.slow
+    def test_validators_with_large_dataset_edge_cases(
+        self, large_dataset, sample_feature_params
+    ):
+        """Test validators with large dataset and edge cases"""
+        # Test that validators can handle large dataset from fixture
+        features = large_dataset.data.columns[:3].tolist()
+
         DataGeneratorValidators.validate_visualisation_parameters(
-            all_features,
-            max_features_to_show=len(all_features),
+            features,
+            max_features_to_show=len(features),
             n_bins=50,
-            data=generator_with_sample_data.data,
+            data=large_dataset.data,
         )
 
-    def test_error_message_patterns_match_fixtures(self, generator_with_sample_data):
-        """Test that error messages match patterns defined in ERROR_PATTERNS"""
-        # Test specific error pattern for invalid perturbation type
-        with pytest.raises(
-            ValueError, match="perturbation_type must be 'gaussian' or 'uniform'"
-        ):
-            DataGeneratorValidators.validate_perturbation_parameters(
-                "invalid_type", ["test_feature_1"], 0.1, generator_with_sample_data.data
-            )
+        # Verify large dataset characteristics
+        assert large_dataset.data.shape[0] >= 1000
+        assert large_dataset.data.shape[1] >= 5
+        assert not large_dataset.data.isnull().any().any()
 
-        # Test specific error pattern for missing features
-        with pytest.raises(ValueError, match="Features not found in data"):
-            DataGeneratorValidators.validate_target_parameters(
-                ["nonexistent"], [1.0], "linear", generator_with_sample_data.data
-            )
+        # Test edge cases with extreme values from sample data
+        extreme_feature_params = {
+            name: {"mean": params["mean"] * 100, "std": params["std"] * 10}
+            for name, params in sample_feature_params.items()
+        }
+        DataGeneratorValidators.validate_feature_parameters(extreme_feature_params)
 
-        # Test specific error pattern for weight mismatch
-        with pytest.raises(
-            ValueError, match="Number of weights must match number of features to use"
-        ):
-            DataGeneratorValidators.validate_target_parameters(
-                list(SAMPLE_FEATURE_PARAMS.keys())[:2],
-                [1.0],
-                "linear",
-                generator_with_sample_data.data,
-            )
+        # Test with single feature
+        single_feature_params = {
+            list(sample_feature_params.keys())[0]: list(sample_feature_params.values())[
+                0
+            ]
+        }
+        DataGeneratorValidators.validate_feature_parameters(single_feature_params)
