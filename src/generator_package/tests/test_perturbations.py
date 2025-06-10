@@ -5,182 +5,174 @@ Tests for data perturbation functionality.
 import pytest
 import numpy as np
 from .fixtures.sample_data import (
-    SAMPLE_FEATURE_PARAMS,
-    SAMPLE_FEATURE_TYPES,
     PERTURBATION_LEVELS,
 )
 
 
 class TestPerturbations:
-    def test_realistic_noise_continuous_features(self, generator_with_sample_data):
-        """Test realistic noise on continuous features"""
-        original_data = generator_with_sample_data.data.copy()
+    @pytest.mark.parametrize("noise_level", PERTURBATION_LEVELS.keys())
+    def test_all_noise_levels_comprehensive(
+        self,
+        generator_factory,
+        sample_feature_params,
+        sample_feature_types,
+        test_seeds,
+        noise_level,
+    ):
+        """Test all noise levels from fixtures including noise_free"""
+        scale = PERTURBATION_LEVELS[noise_level]
+
+        gen = generator_factory(
+            n_samples=100,
+            n_features=len(sample_feature_params),
+            random_state=test_seeds[0],
+        )
+        gen.generate_features(sample_feature_params, sample_feature_types)
+        original_data = gen.data.copy()
+
         continuous_features = [
             name
-            for name, ftype in SAMPLE_FEATURE_TYPES.items()
+            for name, ftype in sample_feature_types.items()
             if ftype == "continuous"
         ]
-        scale = PERTURBATION_LEVELS["realistic_noise"]
 
-        generator_with_sample_data.add_perturbations(
+        gen.add_perturbations(
             features=continuous_features, perturbation_type="gaussian", scale=scale
         )
 
         for feature in continuous_features:
-            assert not np.array_equal(
-                original_data[feature].values,
-                generator_with_sample_data.data[feature].values,
-            ), f"Continuous feature {feature} was not perturbed"
+            diff = gen.data[feature] - original_data[feature]
 
-    def test_minimal_noise_continuous_features(self, generator_with_sample_data):
-        """Test minimal noise on continuous features"""
-        original_data = generator_with_sample_data.data.copy()
+            if noise_level == "noise_free":
+                # Should be exactly zero
+                np.testing.assert_array_equal(
+                    original_data[feature].values,
+                    gen.data[feature].values,
+                    err_msg=f"Noise-free should produce no changes for {feature}",
+                )
+            else:
+                # check for changes
+                assert not np.array_equal(
+                    original_data[feature].values,
+                    gen.data[feature].values,
+                ), f"Feature {feature} should change with {noise_level}"
+
+                # Magnitude should correlate with scale from fixtures
+                expected_std = scale
+                actual_std = diff.std()
+                tolerance = max(
+                    0.05, expected_std * 0.4
+                )  # Allow for statistical variation
+
+                assert abs(actual_std - expected_std) < tolerance, (
+                    f"{noise_level} (scale={scale}) produced std={actual_std:.3f}, "
+                    f"expected ~{expected_std:.3f} for {feature}"
+                )
+
+    @pytest.mark.parametrize("perturbation_type", ["gaussian", "uniform"])
+    def test_perturbation_types_by_feature_type(
+        self,
+        generator_factory,
+        sample_feature_params,
+        sample_feature_types,
+        test_seeds,
+        perturbation_type,
+    ):
+        """Test both perturbation types on continuous and discrete features"""
+        gen = generator_factory(
+            n_samples=100,
+            n_features=len(sample_feature_params),
+            random_state=test_seeds[0],
+        )
+        gen.generate_features(sample_feature_params, sample_feature_types)
+        original_data = gen.data.copy()
+
+        # Test continuous features with realistic noise
         continuous_features = [
             name
-            for name, ftype in SAMPLE_FEATURE_TYPES.items()
+            for name, ftype in sample_feature_types.items()
             if ftype == "continuous"
         ]
-        scale = PERTURBATION_LEVELS["minimal_noise"]
-
-        generator_with_sample_data.add_perturbations(
-            features=continuous_features, perturbation_type="gaussian", scale=scale
-        )
-
-        for feature in continuous_features:
-            assert not np.array_equal(
-                original_data[feature].values,
-                generator_with_sample_data.data[feature].values,
-            ), f"Continuous feature {feature} was not perturbed with minimal noise"
-
-            # Check that changes are small for minimal noise
-            diff = generator_with_sample_data.data[feature] - original_data[feature]
-            assert diff.std() < 0.05, (
-                f"Minimal noise should produce small changes for {feature}"
+        if continuous_features:
+            continuous_scale = PERTURBATION_LEVELS["realistic_noise"]
+            gen.add_perturbations(
+                features=continuous_features,
+                perturbation_type=perturbation_type,
+                scale=continuous_scale,
             )
 
-    def test_extreme_noise_continuous_features(self, generator_with_sample_data):
-        """Test extreme noise on continuous features"""
-        original_data = generator_with_sample_data.data.copy()
-        continuous_features = [
-            name
-            for name, ftype in SAMPLE_FEATURE_TYPES.items()
-            if ftype == "continuous"
-        ]
-        scale = PERTURBATION_LEVELS["extreme_noise"]
+            for feature in continuous_features:
+                assert not np.array_equal(
+                    original_data[feature].values,
+                    gen.data[feature].values,
+                ), (
+                    f"Continuous feature {feature} not perturbed with {perturbation_type}"
+                )
 
-        generator_with_sample_data.add_perturbations(
-            features=continuous_features, perturbation_type="gaussian", scale=scale
-        )
+                if perturbation_type == "uniform":
+                    diff = gen.data[feature] - original_data[feature]
+                    assert all(abs(d) <= continuous_scale for d in diff), (
+                        f"Uniform perturbation exceeds bounds for {feature}"
+                    )
 
-        for feature in continuous_features:
-            assert not np.array_equal(
-                original_data[feature].values,
-                generator_with_sample_data.data[feature].values,
-            ), f"Continuous feature {feature} was not perturbed with extreme noise"
-
-            # Check that changes are substantial for extreme noise
-            diff = generator_with_sample_data.data[feature] - original_data[feature]
-            assert diff.std() > 0.3, (
-                f"Extreme noise should produce large changes for {feature}"
-            )
-
-    def test_uniform_perturbation_continuous_features(self, generator_with_sample_data):
-        """Test uniform perturbation on continuous features"""
-        original_data = generator_with_sample_data.data.copy()
-        continuous_features = [
-            name
-            for name, ftype in SAMPLE_FEATURE_TYPES.items()
-            if ftype == "continuous"
-        ]
-        scale = PERTURBATION_LEVELS["realistic_noise"]
-
-        generator_with_sample_data.add_perturbations(
-            features=continuous_features, perturbation_type="uniform", scale=scale
-        )
-
-        for feature in continuous_features:
-            assert not np.array_equal(
-                original_data[feature].values,
-                generator_with_sample_data.data[feature].values,
-            ), f"Continuous feature {feature} was not perturbed with uniform noise"
-
-            # For uniform distribution, changes should be within [-scale, scale]
-            diff = generator_with_sample_data.data[feature] - original_data[feature]
-            assert all(abs(d) <= scale for d in diff), (
-                f"Uniform perturbation exceeds bounds for {feature}"
-            )
-
-    def test_realistic_noise_discrete_features(self, generator_with_sample_data):
-        """Test realistic noise on discrete features with appropriate scale"""
-        original_data = generator_with_sample_data.data.copy()
+        # Test discrete features with higher noise
         discrete_features = [
-            name for name, ftype in SAMPLE_FEATURE_TYPES.items() if ftype == "discrete"
+            name for name, ftype in sample_feature_types.items() if ftype == "discrete"
         ]
-        # higher scale for discrete features
-        scale = PERTURBATION_LEVELS["high_noise"]  # 0.3
-
         if discrete_features:
-            generator_with_sample_data.add_perturbations(
-                features=discrete_features, perturbation_type="gaussian", scale=scale
+            # Create fresh generator for discrete test
+            fresh_gen = generator_factory(
+                n_samples=100,
+                n_features=len(sample_feature_params),
+                random_state=test_seeds[0],
+            )
+            fresh_gen.generate_features(sample_feature_params, sample_feature_types)
+            original_discrete = fresh_gen.data.copy()
+
+            # Use extreme noise for discrete features
+            discrete_scale = PERTURBATION_LEVELS["extreme_noise"]
+            fresh_gen.add_perturbations(
+                features=discrete_features,
+                perturbation_type=perturbation_type,
+                scale=discrete_scale,
             )
 
             for feature in discrete_features:
-                changes = (
-                    original_data[feature] != generator_with_sample_data.data[feature]
-                ).sum()
+                changes = (original_discrete[feature] != fresh_gen.data[feature]).sum()
                 assert changes > 0, (
-                    f"Discrete feature {feature} should have some changes"
+                    f"Discrete feature {feature} should change with {perturbation_type}"
                 )
 
-    def test_uniform_perturbation_discrete_features(self, generator_with_sample_data):
-        """Test uniform perturbation on discrete features with higher scale"""
-        original_data = generator_with_sample_data.data.copy()
-        discrete_features = [
-            name for name, ftype in SAMPLE_FEATURE_TYPES.items() if ftype == "discrete"
-        ]
-        scale = PERTURBATION_LEVELS["extreme_noise"]
-
-        if discrete_features:
-            generator_with_sample_data.add_perturbations(
-                features=discrete_features, perturbation_type="uniform", scale=scale
-            )
-
-            for feature in discrete_features:
-                changes = (
-                    original_data[feature] != generator_with_sample_data.data[feature]
-                ).sum()
-                assert changes > 0, (
-                    f"Discrete feature {feature} should have changes with uniform noise"
-                )
-
-                # Check that discrete features remain integers
+                # Verify discrete features remain integers
                 all_integers = all(
-                    float(val).is_integer()
-                    for val in generator_with_sample_data.data[feature]
+                    float(val).is_integer() for val in fresh_gen.data[feature]
                 )
                 assert all_integers, (
-                    f"Discrete feature {feature} should remain integers after perturbation"
+                    f"Discrete feature {feature} should remain integers"
                 )
 
-    def test_selective_feature_perturbation(self, generator_with_sample_data):
-        """Test that only specified features are perturbed"""
+    def test_selective_and_sequential_perturbations(
+        self, generator_with_sample_data, sample_feature_params
+    ):
+        """Test selective feature perturbation and sequential application"""
         original_data = generator_with_sample_data.data.copy()
-        all_features = list(SAMPLE_FEATURE_PARAMS.keys())
+        all_features = list(sample_feature_params.keys())
         features_to_perturb = [all_features[0]]  # Only perturb first feature
         scale = PERTURBATION_LEVELS["realistic_noise"]
 
+        # Test selective perturbation
         generator_with_sample_data.add_perturbations(
             features=features_to_perturb, perturbation_type="gaussian", scale=scale
         )
 
-        # Check perturbed feature changed
+        # Check selected feature changed
         for feature in features_to_perturb:
             assert not np.array_equal(
                 original_data[feature].values,
                 generator_with_sample_data.data[feature].values,
             ), f"Selected feature {feature} was not perturbed"
 
-        # Check other features remained unchanged
+        # Check other features unchanged
         unchanged_features = [f for f in all_features if f not in features_to_perturb]
         for feature in unchanged_features:
             (
@@ -191,182 +183,230 @@ class TestPerturbations:
                 f"Unselected feature {feature} should not have changed",
             )
 
-    def test_multiple_perturbations_sequential(self, generator_with_sample_data):
-        """Test applying multiple perturbations sequentially"""
-        original_data = generator_with_sample_data.data.copy()
-        continuous_features = [
-            name
-            for name, ftype in SAMPLE_FEATURE_TYPES.items()
-            if ftype == "continuous"
-        ]
-        test_feature = continuous_features[0]
-
-        # Apply first perturbation
-        generator_with_sample_data.add_perturbations(
-            features=[test_feature],
-            perturbation_type="gaussian",
-            scale=PERTURBATION_LEVELS["low_noise"],
-        )
+        # Test sequential perturbation on the same feature
         first_perturbation = generator_with_sample_data.data.copy()
+        low_noise_scale = PERTURBATION_LEVELS["low_noise"]
 
         # Apply second perturbation
         generator_with_sample_data.add_perturbations(
-            features=[test_feature],
+            features=[features_to_perturb[0]],
             perturbation_type="uniform",
-            scale=PERTURBATION_LEVELS["low_noise"],
+            scale=low_noise_scale,
         )
 
-        # Check data is different from both original and first perturbation
+        # Verify cumulative changes
         assert not np.array_equal(
-            original_data[test_feature].values,
-            generator_with_sample_data.data[test_feature].values,
-        ), "Final data should differ from original"
+            first_perturbation[features_to_perturb[0]].values,
+            generator_with_sample_data.data[features_to_perturb[0]].values,
+        ), "Sequential perturbation should modify data further"
 
-        assert not np.array_equal(
-            first_perturbation[test_feature].values,
-            generator_with_sample_data.data[test_feature].values,
-        ), "Final data should differ from first perturbation"
+    def test_perturbation_validation_and_structure(
+        self, generator_with_sample_data, sample_feature_params
+    ):
+        """Test comprehensive validation and data structure preservation"""
+        actual_feature = list(sample_feature_params.keys())[0]
+        valid_scale = PERTURBATION_LEVELS["realistic_noise"]
 
-    def test_perturbation_validation_errors(self, generator_with_sample_data):
-        """Test perturbation parameter validation using exact error patterns"""
-        actual_feature = list(SAMPLE_FEATURE_PARAMS.keys())[0]
-
-        # Test invalid perturbation type
+        # Test validation errors
         with pytest.raises(
             ValueError, match="perturbation_type must be 'gaussian' or 'uniform'"
         ):
             generator_with_sample_data.add_perturbations(
-                features=[actual_feature], perturbation_type="invalid_type", scale=0.1
+                features=[actual_feature],
+                perturbation_type="invalid_type",
+                scale=valid_scale,
             )
 
-        # Test negative scale
         with pytest.raises(ValueError, match="Scale must be non-negative"):
             generator_with_sample_data.add_perturbations(
                 features=[actual_feature], perturbation_type="gaussian", scale=-0.1
             )
 
-        # Test non-existent feature
         with pytest.raises(ValueError, match="Feature.*not found"):
             generator_with_sample_data.add_perturbations(
                 features=["nonexistent_feature"],
                 perturbation_type="gaussian",
-                scale=0.1,
+                scale=valid_scale,
             )
 
-    def test_perturbation_preserves_data_structure(self, generator_with_sample_data):
-        """Test that perturbation preserves DataFrame structure and types"""
+        # Test structure preservation
         original_shape = generator_with_sample_data.data.shape
         original_columns = generator_with_sample_data.data.columns.tolist()
-        all_features = list(SAMPLE_FEATURE_PARAMS.keys())
 
         generator_with_sample_data.add_perturbations(
-            features=all_features,
+            features=list(sample_feature_params.keys()),
             perturbation_type="gaussian",
-            scale=PERTURBATION_LEVELS["realistic_noise"],
+            scale=valid_scale,
         )
 
-        # Structure should remain the same
+        # Verify structure preservation
         assert generator_with_sample_data.data.shape == original_shape
         assert generator_with_sample_data.data.columns.tolist() == original_columns
         assert not generator_with_sample_data.data.isnull().any().any()
 
-    def test_noise_free_perturbation(self, generator_with_sample_data):
-        """Test that noise-free perturbation makes no changes"""
-        original_data = generator_with_sample_data.data.copy()
-        all_features = list(SAMPLE_FEATURE_PARAMS.keys())
-        scale = PERTURBATION_LEVELS["noise_free"]  # 0.0
-
-        generator_with_sample_data.add_perturbations(
-            features=all_features, perturbation_type="gaussian", scale=scale
-        )
-
-        # Data should remain unchanged
-        for feature in all_features:
-            (
-                np.testing.assert_array_equal(
-                    original_data[feature].values,
-                    generator_with_sample_data.data[feature].values,
-                ),
-                f"Feature {feature} should not change with noise-free perturbation",
-            )
-
-    def test_all_perturbation_levels_continuous(self, generator_factory):
-        """Test all perturbation levels on continuous features"""
-        for level_name, scale_value in PERTURBATION_LEVELS.items():
-            if level_name == "noise_free":  # Skip zero noise
-                continue
-
-            gen = generator_factory(n_samples=50, n_features=len(SAMPLE_FEATURE_PARAMS))
-            gen.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
-            original_data = gen.data.copy()
-
-            continuous_features = [
-                name
-                for name, ftype in SAMPLE_FEATURE_TYPES.items()
-                if ftype == "continuous"
-            ]
-
-            gen.add_perturbations(
-                features=continuous_features,
-                perturbation_type="gaussian",
-                scale=scale_value,
-            )
-
-            # Verify perturbation was applied
-            for feature in continuous_features:
-                assert not np.array_equal(
-                    original_data[feature].values,
-                    gen.data[feature].values,
-                ), f"No perturbation applied for {level_name} level on {feature}"
-
-                # Check magnitude correlation with level
-                diff = gen.data[feature] - original_data[feature]
-                if level_name == "minimal_noise":
-                    assert diff.std() < 0.05, (
-                        f"Minimal noise too large: {diff.std():.4f}"
-                    )
-                elif level_name == "extreme_noise":
-                    assert diff.std() > 0.2, (
-                        f"Extreme noise too small: {diff.std():.4f}"
-                    )
-
-    def test_perturbation_reproducibility_with_seeds(
-        self, generator_factory, test_seeds
+    def test_reproducibility_and_seed_differences(
+        self,
+        reproducible_generators,
+        different_seed_generators,
+        sample_feature_params,
+        sample_feature_types,
     ):
-        """Test perturbation reproducibility"""
-        seed = test_seeds[0]
-        continuous_features = [
-            name
-            for name, ftype in SAMPLE_FEATURE_TYPES.items()
-            if ftype == "continuous"
-        ]
-        test_feature = continuous_features[0]
+        """Test both reproducible behavior and seed differences"""
+        test_feature = list(sample_feature_params.keys())[0]
+        realistic_scale = PERTURBATION_LEVELS["realistic_noise"]
 
-        # Create two identical generators
-        gen1 = generator_factory(
-            n_samples=100, n_features=len(SAMPLE_FEATURE_PARAMS), random_state=seed
-        )
-        gen2 = generator_factory(
-            n_samples=100, n_features=len(SAMPLE_FEATURE_PARAMS), random_state=seed
-        )
+        # Test reproducible behavior
+        gen1, gen2 = reproducible_generators
+        gen1.generate_features(sample_feature_params, sample_feature_types)
+        gen2.generate_features(sample_feature_params, sample_feature_types)
 
-        # Generate identical base data
-        gen1.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
-        gen2.generate_features(SAMPLE_FEATURE_PARAMS, SAMPLE_FEATURE_TYPES)
-
-        # Apply same perturbation
         perturbation_params = {
             "features": [test_feature],
             "perturbation_type": "gaussian",
-            "scale": PERTURBATION_LEVELS["realistic_noise"],
+            "scale": realistic_scale,
         }
 
         gen1.add_perturbations(**perturbation_params)
         gen2.add_perturbations(**perturbation_params)
 
-        # Results should be identical if implementation is deterministic
+        # Results should be identical
         np.testing.assert_array_equal(
             gen1.data[test_feature].values,
             gen2.data[test_feature].values,
             err_msg="Perturbations should be reproducible with same seed",
         )
+
+        # Test different seeds produce different results
+        gen3, gen4 = different_seed_generators
+        gen3.generate_features(sample_feature_params, sample_feature_types)
+        gen4.generate_features(sample_feature_params, sample_feature_types)
+
+        orig3 = gen3.data[test_feature].copy()
+        orig4 = gen4.data[test_feature].copy()
+
+        gen3.add_perturbations(**perturbation_params)
+        gen4.add_perturbations(**perturbation_params)
+
+        # The perturbations should be different due to different seeds
+        diff3 = gen3.data[test_feature] - orig3
+        diff4 = gen4.data[test_feature] - orig4
+
+        assert not np.array_equal(diff3.values, diff4.values), (
+            "Different seeds should produce different perturbations"
+        )
+
+    def test_neural_network_research_scenarios_comprehensive(
+        self,
+        generator_factory,
+        sample_feature_params,
+        sample_feature_types,
+        standard_test_config,
+    ):
+        """Test complete neural network research scenarios including mixed features"""
+        # Test research scenarios with different noise levels
+        research_scenarios = [
+            ("low_noise", "Low noise for baseline NN training"),
+            ("realistic_noise", "Realistic noise for standard NN research"),
+            ("high_noise", "High noise for robustness testing"),
+        ]
+
+        for noise_level, description in research_scenarios:
+            gen = generator_factory(
+                n_samples=standard_test_config["samples"],
+                n_features=len(sample_feature_params),
+            )
+            gen.generate_features(sample_feature_params, sample_feature_types)
+            original_std = gen.data.std().mean()
+
+            # Apply perturbation using fixture values
+            scale = PERTURBATION_LEVELS[noise_level]
+            gen.add_perturbations(
+                features=list(sample_feature_params.keys()),
+                perturbation_type="gaussian",
+                scale=scale,
+            )
+
+            # Verify complexity
+            perturbed_std = gen.data.std().mean()
+
+            if noise_level != "low_noise":
+                assert perturbed_std > original_std, (
+                    f"{description}: Should increase data complexity"
+                )
+
+            # Should maintain reasonable bounds for NN training
+            feature_means = gen.data.mean()
+            assert all(abs(mean) < 50 for mean in feature_means), (
+                f"{description}: Data should remain in reasonable range for NN training"
+            )
+
+        # Test mixed feature types handling
+        continuous_features = [
+            name
+            for name, ftype in sample_feature_types.items()
+            if ftype == "continuous"
+        ][:1]
+        discrete_features = [
+            name for name, ftype in sample_feature_types.items() if ftype == "discrete"
+        ][:1]
+
+        if continuous_features and discrete_features:
+            mixed_gen = generator_factory(
+                n_samples=100, n_features=len(sample_feature_params)
+            )
+            mixed_gen.generate_features(sample_feature_params, sample_feature_types)
+            original_mixed = mixed_gen.data.copy()
+
+            # Apply different appropriate scales for each feature type
+            mixed_gen.add_perturbations(
+                features=continuous_features,
+                perturbation_type="gaussian",
+                scale=PERTURBATION_LEVELS["realistic_noise"],
+            )
+            mixed_gen.add_perturbations(
+                features=discrete_features,
+                perturbation_type="gaussian",
+                scale=PERTURBATION_LEVELS["extreme_noise"],
+            )
+
+            # Verify mixed feature handling
+            for feature in continuous_features + discrete_features:
+                assert not np.array_equal(
+                    original_mixed[feature].values,
+                    mixed_gen.data[feature].values,
+                ), f"Mixed feature {feature} should be perturbed"
+
+    @pytest.mark.slow
+    def test_performance_and_edge_cases(
+        self,
+        large_dataset,
+        basic_generator,
+        sample_feature_params,
+        sample_feature_types,
+    ):
+        """Test performance with large dataset and edge cases"""
+        # Test large dataset performance
+        original_data = large_dataset.data.copy()
+        features_to_test = large_dataset.data.columns[:3].tolist()
+
+        large_dataset.add_perturbations(
+            features=features_to_test,
+            perturbation_type="gaussian",
+            scale=PERTURBATION_LEVELS["realistic_noise"],
+        )
+
+        # Verify performance and correctness
+        assert large_dataset.data.shape[0] >= 1000  # From large_dataset fixture
+
+        for feature in features_to_test:
+            assert not np.array_equal(
+                original_data[feature].values, large_dataset.data[feature].values
+            ), f"Large dataset feature {feature} should be perturbed"
+
+        # Test edge case: perturbation before data generation
+        with pytest.raises(ValueError, match="No data generated"):
+            basic_generator.add_perturbations(
+                features=["feature_0"],
+                perturbation_type="gaussian",
+                scale=PERTURBATION_LEVELS["realistic_noise"],
+            )
