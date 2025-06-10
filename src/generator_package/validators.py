@@ -73,6 +73,9 @@ class DataGeneratorValidators:
         ValueError
             If feature types are not 'continuous' or 'discrete'
         """
+        if not isinstance(feature_types, dict):
+            raise ValueError("Feature types must be a dictionary")
+
         valid_types = {"continuous", "discrete"}
         for feature_name, feature_type in feature_types.items():
             if feature_type not in valid_types:
