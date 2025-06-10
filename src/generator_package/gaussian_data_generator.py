@@ -231,8 +231,10 @@ class GaussianDataGenerator:
                 target += weight * self.data[feature]
 
         # Add noise
-        noise = np.random.normal(0, noise_level, self.n_samples)
-        target += noise
+        if noise_level > 0:
+            np.random.seed(self.random_state)  # Ensure consistent random state
+            noise = np.random.normal(0, noise_level, self.n_samples)
+            target += noise
 
         # Apply logistic transformation if specified
         if function_type == "logistic":
