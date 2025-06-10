@@ -4,14 +4,10 @@ Tests for data perturbation functionality.
 
 import pytest
 import numpy as np
-from generator_package.gaussian_data_generator import GaussianDataGenerator
 from .fixtures.sample_data import (
     SAMPLE_FEATURE_PARAMS,
     SAMPLE_FEATURE_TYPES,
     PERTURBATION_LEVELS,
-    REPRODUCIBILITY_SEEDS,
-    DATASET_CONFIGS,
-    ERROR_PATTERNS,
 )
 
 
