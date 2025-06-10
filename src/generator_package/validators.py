@@ -103,7 +103,7 @@ class DataGeneratorValidators:
         if perturbation_type not in ["gaussian", "uniform"]:
             raise ValueError("perturbation_type must be 'gaussian' or 'uniform'")
 
-        if scale <= 0:
+        if scale < 0:
             raise ValueError("Scale must be positive")
 
         if data is None:
