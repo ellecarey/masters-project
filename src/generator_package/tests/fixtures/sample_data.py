@@ -57,14 +57,7 @@ PERTURBATION_LEVELS = {
 }
 
 # Weight configurations for target variable creation
-TARGET_WEIGHTS = {
-    "balanced_weights": [1.0, -0.5, 0.3],
-    "unbalanced_weights": [2.5, -1.8, 0.7, -0.2, 1.1],
-    "single_weight": [1.0],
-    "zero_weights": [0.0, 0.0, 0.0],
-    "large_magnitude": [100.0, -50.0, 25.0],
-    "small_magnitude": [0.001, -0.002, 0.003],
-}
+TARGET_WEIGHTS = [1.0, -0.5, 0.3, 2.5, -1.8, 0.7, -0.2, 1.1]
 
 # Function types for target creation
 FUNCTION_TYPES = ["linear", "polynomial", "logistic"]
