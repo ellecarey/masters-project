@@ -244,7 +244,7 @@ class TestPerturbations:
             )
 
         # Test negative scale
-        with pytest.raises(ValueError, match="Scale must be positive"):
+        with pytest.raises(ValueError, match="Scale must be non-negative"):
             generator_with_sample_data.add_perturbations(
                 features=[actual_feature], perturbation_type="gaussian", scale=-0.1
             )
