@@ -421,7 +421,7 @@ class TestDataGeneratorValidators:
                 all_features, all_weights, "polynomial", generator_with_sample_data.data
             )
 
-        # Test visualization with maximum features
+        # Test visualisation with maximum features
         DataGeneratorValidators.validate_visualisation_parameters(
             all_features,
             max_features_to_show=len(all_features),
