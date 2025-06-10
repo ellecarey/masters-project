@@ -53,7 +53,7 @@ PERTURBATION_LEVELS = {
     "low_noise": 0.05,
     "realistic_noise": 0.1,
     "high_noise": 0.3,
-    "extreme_noise": 0.5,
+    "extreme_noise": 1.0,
 }
 
 # Weight configurations for target variable creation
