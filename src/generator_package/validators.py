@@ -20,6 +20,10 @@ class DataGeneratorValidators:
         ValueError
             If parameters are invalid or missing required keys
         """
+        # check input is a dictionary
+        if not isinstance(feature_parameters, dict):
+            raise ValueError("Feature parameters must be a dictionary")
+
         for feature_name, params in feature_parameters.items():
             if not isinstance(params, dict):
                 raise ValueError(f"Parameters for {feature_name} must be a dictionary")
