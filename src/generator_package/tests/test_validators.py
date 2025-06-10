@@ -3,18 +3,12 @@ Tests for data validation functionality.
 """
 
 import pytest
-import pandas as pd
-import numpy as np
 from generator_package.validators import DataGeneratorValidators
-from generator_package.gaussian_data_generator import GaussianDataGenerator
 from .fixtures.sample_data import (
     SAMPLE_FEATURE_PARAMS,
     SAMPLE_FEATURE_TYPES,
-    INVALID_FEATURE_PARAMS,
     TARGET_WEIGHTS,
     FUNCTION_TYPES,
-    PERTURBATION_LEVELS,
-    REPRODUCIBILITY_SEEDS,
     DATASET_CONFIGS,
 )
 
