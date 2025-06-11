@@ -29,7 +29,7 @@ def apply_custom_plot_style(use_latex: bool = True):
                 try:
                     tex_manager.make_tex("test", 12)
                     latex_available = True
-                except:
+                except Exception:
                     latex_available = False
 
             if latex_available:

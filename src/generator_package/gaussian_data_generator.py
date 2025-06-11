@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 import numpy as np
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from .validators import DataGeneratorValidators
@@ -43,14 +44,6 @@ class GaussianDataGenerator:
 
         # Create random number generator from the instance's random state
         rng = np.random.RandomState(self.random_state)
-
-        # Count existing feature columns
-        current_feature_count = 0
-        if self.data is not None:
-            feature_columns = [
-                col for col in self.data.columns if col.startswith("feature_")
-            ]
-            current_feature_count = len(feature_columns)
 
         # Determine how many features to generate
         if n_features_to_generate is None:
@@ -262,6 +255,31 @@ class GaussianDataGenerator:
         print(f"Changed type of '{feature_name}' to '{new_type}'.")
         return self
 
+    def save_data(self, file_path: str):
+        """
+        Saves the generated DataFrame to a CSV file.
+
+        Args:
+            file_path (str): The full path (including filename) to save the CSV file.
+        """
+        if self.data is None:
+            print("Warning: No data to save. Please generate data first.")
+            return self
+
+        try:
+            # Ensure the output directory exists before saving
+            output_dir = os.path.dirname(file_path)
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Save the DataFrame to the specified path
+            self.data.to_csv(file_path, index=False)
+            print(f"Data successfully saved to {file_path}")
+
+        except Exception as e:
+            print(f"Error: Could not save data to {file_path}. Reason: {e}")
+
+        return self
+
     def visualise_features(
         self,
         features: List[str],
@@ -310,12 +328,16 @@ class GaussianDataGenerator:
         plt.tight_layout()
 
         if save_to_dir:
+            # Define filename
+            filename = "feature_distributions_plot.pdf"
+            filepath = os.path.join(save_to_dir, filename)
+
             plt.savefig(
-                f"{save_to_dir}/feature_distributions_plot.pdf",
+                filepath,
                 dpi=300,
                 bbox_inches="tight",
             )
-            print(f"Plot saved to {save_to_dir}/feature_distributions.pdf")
+            print(f"Feature visualisation successfully saved to {filepath}")
         else:
             plt.show()
 
