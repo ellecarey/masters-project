@@ -3,7 +3,7 @@ Tests for data validation functionality.
 """
 
 import pytest
-from generator_package.validators import DataGeneratorValidators
+from data_generator_module.validators import DataGeneratorValidators
 from .fixtures.sample_data import (
     TARGET_WEIGHTS,
     FUNCTION_TYPES,

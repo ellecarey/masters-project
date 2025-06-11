@@ -3,7 +3,7 @@ pytest configuration and shared fixtures
 """
 
 import pytest
-from generator_package.gaussian_data_generator import GaussianDataGenerator
+from data_generator_module.gaussian_data_generator import GaussianDataGenerator
 from .fixtures.sample_data import (
     SAMPLE_FEATURE_PARAMS,
     SAMPLE_FEATURE_TYPES,
