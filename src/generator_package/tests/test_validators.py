@@ -5,14 +5,9 @@ Tests for data validation functionality.
 import pytest
 from generator_package.validators import DataGeneratorValidators
 from .fixtures.sample_data import (
-    SAMPLE_FEATURE_PARAMS,
-    SAMPLE_FEATURE_TYPES,
-    INVALID_FEATURE_PARAMS,
     TARGET_WEIGHTS,
     FUNCTION_TYPES,
     FEATURE_NOISE_LEVELS,
-    REPRODUCIBILITY_SEEDS,
-    DATASET_CONFIGS,
 )
 
 
@@ -288,7 +283,7 @@ class TestDataGeneratorValidators:
         # Validate perturbation using fixtures
         test_features = list(sample_feature_params.keys())[:1]
         DataGeneratorValidators.validate_perturbation_parameters(
-            "gaussian", test_features, FEATURE_NOISE_LEVELS["realistic_noise"], gen.data
+            "gaussian", test_features, FEATURE_NOISE_LEVELS["medium_noise"], gen.data
         )
 
         # Validate target creation using fixtures
