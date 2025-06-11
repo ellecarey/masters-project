@@ -10,7 +10,7 @@ from .fixtures.sample_data import (
     INVALID_FEATURE_PARAMS,
     TARGET_WEIGHTS,
     FUNCTION_TYPES,
-    PERTURBATION_LEVELS,
+    FEATURE_NOISE_LEVELS,
     REPRODUCIBILITY_SEEDS,
     DATASET_CONFIGS,
 )
@@ -103,7 +103,7 @@ class TestDataGeneratorValidators:
 
         # Test valid cases using fixture data
         for perturbation_type in ["gaussian", "uniform"]:
-            for scale_name, scale_value in PERTURBATION_LEVELS.items():
+            for scale_name, scale_value in FEATURE_NOISE_LEVELS.items():
                 DataGeneratorValidators.validate_perturbation_parameters(
                     perturbation_type,
                     valid_features,
@@ -288,7 +288,7 @@ class TestDataGeneratorValidators:
         # Validate perturbation using fixtures
         test_features = list(sample_feature_params.keys())[:1]
         DataGeneratorValidators.validate_perturbation_parameters(
-            "gaussian", test_features, PERTURBATION_LEVELS["realistic_noise"], gen.data
+            "gaussian", test_features, FEATURE_NOISE_LEVELS["realistic_noise"], gen.data
         )
 
         # Validate target creation using fixtures

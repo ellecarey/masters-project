@@ -5,12 +5,12 @@ Tests for data perturbation functionality.
 import pytest
 import numpy as np
 from .fixtures.sample_data import (
-    PERTURBATION_LEVELS,
+    FEATURE_NOISE_LEVELS,
 )
 
 
 class TestPerturbations:
-    @pytest.mark.parametrize("noise_level", PERTURBATION_LEVELS.keys())
+    @pytest.mark.parametrize("noise_level", FEATURE_NOISE_LEVELS.keys())
     def test_all_noise_levels_comprehensive(
         self,
         generator_factory,
@@ -19,8 +19,8 @@ class TestPerturbations:
         test_seeds,
         noise_level,
     ):
-        """Test all noise levels from fixtures including noise_free"""
-        scale = PERTURBATION_LEVELS[noise_level]
+        """Test all noise levels from fixtures including no_noise"""
+        scale = FEATURE_NOISE_LEVELS[noise_level]
 
         gen = generator_factory(
             n_samples=100,
@@ -43,7 +43,7 @@ class TestPerturbations:
         for feature in continuous_features:
             diff = gen.data[feature] - original_data[feature]
 
-            if noise_level == "noise_free":
+            if noise_level == "no_noise":
                 # Should be exactly zero
                 np.testing.assert_array_equal(
                     original_data[feature].values,
@@ -94,7 +94,7 @@ class TestPerturbations:
             if ftype == "continuous"
         ]
         if continuous_features:
-            continuous_scale = PERTURBATION_LEVELS["realistic_noise"]
+            continuous_scale = FEATURE_NOISE_LEVELS["medium_noise"]
             gen.add_perturbations(
                 features=continuous_features,
                 perturbation_type=perturbation_type,
@@ -130,7 +130,7 @@ class TestPerturbations:
             original_discrete = fresh_gen.data.copy()
 
             # Use extreme noise for discrete features
-            discrete_scale = PERTURBATION_LEVELS["extreme_noise"]
+            discrete_scale = FEATURE_NOISE_LEVELS["extreme_noise"]
             fresh_gen.add_perturbations(
                 features=discrete_features,
                 perturbation_type=perturbation_type,
@@ -158,7 +158,7 @@ class TestPerturbations:
         original_data = generator_with_sample_data.data.copy()
         all_features = list(sample_feature_params.keys())
         features_to_perturb = [all_features[0]]  # Only perturb first feature
-        scale = PERTURBATION_LEVELS["realistic_noise"]
+        scale = FEATURE_NOISE_LEVELS["medium_noise"]
 
         # Test selective perturbation
         generator_with_sample_data.add_perturbations(
@@ -185,7 +185,7 @@ class TestPerturbations:
 
         # Test sequential perturbation on the same feature
         first_perturbation = generator_with_sample_data.data.copy()
-        low_noise_scale = PERTURBATION_LEVELS["low_noise"]
+        low_noise_scale = FEATURE_NOISE_LEVELS["low_noise"]
 
         # Apply second perturbation
         generator_with_sample_data.add_perturbations(
@@ -205,7 +205,7 @@ class TestPerturbations:
     ):
         """Test comprehensive validation and data structure preservation"""
         actual_feature = list(sample_feature_params.keys())[0]
-        valid_scale = PERTURBATION_LEVELS["realistic_noise"]
+        valid_scale = FEATURE_NOISE_LEVELS["medium_noise"]
 
         # Test validation errors
         with pytest.raises(
@@ -253,7 +253,7 @@ class TestPerturbations:
     ):
         """Test both reproducible behavior and seed differences"""
         test_feature = list(sample_feature_params.keys())[0]
-        realistic_scale = PERTURBATION_LEVELS["realistic_noise"]
+        realistic_scale = FEATURE_NOISE_LEVELS["medium_noise"]
 
         # Test reproducible behavior
         gen1, gen2 = reproducible_generators
@@ -306,7 +306,7 @@ class TestPerturbations:
         # Test research scenarios with different noise levels
         research_scenarios = [
             ("low_noise", "Low noise for baseline NN training"),
-            ("realistic_noise", "Realistic noise for standard NN research"),
+            ("medium_noise", "Realistic noise for standard NN research"),
             ("high_noise", "High noise for robustness testing"),
         ]
 
@@ -319,7 +319,7 @@ class TestPerturbations:
             original_std = gen.data.std().mean()
 
             # Apply perturbation using fixture values
-            scale = PERTURBATION_LEVELS[noise_level]
+            scale = FEATURE_NOISE_LEVELS[noise_level]
             gen.add_perturbations(
                 features=list(sample_feature_params.keys()),
                 perturbation_type="gaussian",
@@ -361,12 +361,12 @@ class TestPerturbations:
             mixed_gen.add_perturbations(
                 features=continuous_features,
                 perturbation_type="gaussian",
-                scale=PERTURBATION_LEVELS["realistic_noise"],
+                scale=FEATURE_NOISE_LEVELS["medium_noise"],
             )
             mixed_gen.add_perturbations(
                 features=discrete_features,
                 perturbation_type="gaussian",
-                scale=PERTURBATION_LEVELS["extreme_noise"],
+                scale=FEATURE_NOISE_LEVELS["extreme_noise"],
             )
 
             # Verify mixed feature handling
@@ -392,7 +392,7 @@ class TestPerturbations:
         large_dataset.add_perturbations(
             features=features_to_test,
             perturbation_type="gaussian",
-            scale=PERTURBATION_LEVELS["realistic_noise"],
+            scale=FEATURE_NOISE_LEVELS["medium_noise"],
         )
 
         # Verify performance and correctness
@@ -408,5 +408,5 @@ class TestPerturbations:
             basic_generator.add_perturbations(
                 features=["feature_0"],
                 perturbation_type="gaussian",
-                scale=PERTURBATION_LEVELS["realistic_noise"],
+                scale=FEATURE_NOISE_LEVELS["medium_noise"],
             )

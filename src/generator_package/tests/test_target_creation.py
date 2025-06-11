@@ -78,7 +78,7 @@ class TestTargetCreation:
 
         # Test different noise levels
         targets = {}
-        for noise_name in ["no_noise", "minimal_noise", "high_noise"]:
+        for noise_name in ["no_noise", "low_noise", "high_noise"]:
             gen = generator_factory(
                 n_samples=100, n_features=len(sample_feature_params), random_state=seed
             )
@@ -94,7 +94,7 @@ class TestTargetCreation:
         # Higher noise should increase variance
         assert targets["no_noise"].std() < targets["high_noise"].std()
         assert not np.array_equal(
-            targets["no_noise"].values, targets["minimal_noise"].values
+            targets["no_noise"].values, targets["low_noise"].values
         )
 
         # Test reproducibility
@@ -112,7 +112,7 @@ class TestTargetCreation:
             "features_to_use": features_to_use,
             "weights": weights,
             "function_type": "linear",
-            "noise_level": TARGET_NOISE_LEVELS["minimal_noise"],
+            "noise_level": TARGET_NOISE_LEVELS["low_noise"],
         }
 
         gen1.create_target_variable(**target_params)
@@ -181,7 +181,7 @@ class TestTargetCreation:
             features_to_use=mixed_features,
             weights=mixed_weights,
             function_type="linear",
-            noise_level=TARGET_NOISE_LEVELS["minimal_noise"],
+            noise_level=TARGET_NOISE_LEVELS["low_noise"],
         )
 
         # Validate structure preservation
@@ -203,13 +203,13 @@ class TestTargetCreation:
 
         # Test multiple scenarios for neural network research
         research_scenarios = [
-            ("linear", "minimal_noise", "Simple regression for baseline NN training"),
+            ("linear", "low_noise", "Simple regression for baseline NN training"),
             (
                 "polynomial",
-                "standard_noise",
+                "medium_noise",
                 "Complex non-linear for advanced NN testing",
             ),
-            ("logistic", "standard_noise", "Classification scenarios for NN research"),
+            ("logistic", "medium_noise", "Classification scenarios for NN research"),
         ]
 
         results = {}
