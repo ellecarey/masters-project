@@ -60,7 +60,7 @@ class TestDataGeneratorValidators:
     def test_validate_init_parameters_comprehensive(
         self, n_samples, n_features, should_pass, standard_test_config
     ):
-        """Test initialisation parameter validation with multiple scenarios"""
+        """Test initialisation parameter validation"""
         if should_pass:
             DataGeneratorValidators.validate_init_parameters(n_samples, n_features)
             # Also verify with actual config values
@@ -92,7 +92,7 @@ class TestDataGeneratorValidators:
     def test_validate_perturbation_parameters_comprehensive(
         self, generator_with_sample_data, sample_feature_params
     ):
-        """Test comprehensive perturbation parameter validation"""
+        """Test perturbation parameter validation"""
 
         valid_features = list(sample_feature_params.keys())[:2]
 
@@ -141,7 +141,7 @@ class TestDataGeneratorValidators:
     def test_validate_target_parameters_comprehensive(
         self, generator_with_sample_data, sample_feature_params
     ):
-        """Test comprehensive target parameter validation"""
+        """Test target parameter validation"""
 
         features_to_use = list(sample_feature_params.keys())[:2]
         weights = TARGET_WEIGHTS[: len(features_to_use)]
@@ -193,7 +193,7 @@ class TestDataGeneratorValidators:
     def test_validate_visualisation_parameters_comprehensive(
         self, generator_with_sample_data, sample_feature_params
     ):
-        """Test comprehensive visualisation parameter validation"""
+        """Test visualisation parameter validation"""
         features = list(sample_feature_params.keys())
 
         # Test valid case
@@ -261,9 +261,9 @@ class TestDataGeneratorValidators:
         standard_test_config,
         test_seeds,
     ):
-        """Test validators work throughout complete pipeline using fixtures"""
+        """Test validators work throughout complete pipeline"""
 
-        # Test complete pipeline validation using all fixtures
+        # Test complete pipeline validation
         DataGeneratorValidators.validate_init_parameters(
             standard_test_config["samples"], standard_test_config["features"]
         )
