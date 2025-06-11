@@ -5,7 +5,7 @@ feature generation, perturbations, target creation, and visualisation.
 """
 
 import pytest
-from generator_package.gaussian_data_generator import GaussianDataGenerator
+from data_generator_module.gaussian_data_generator import GaussianDataGenerator
 from .fixtures.sample_data import DATASET_CONFIGS, ERROR_PATTERNS, REPRODUCIBILITY_SEEDS
 
 

@@ -1,8 +1,13 @@
-# Main configuration for the data generation pipeline
+# --------- PIPELINE CONFIGURATION --------- #
+
+# GLOBAL
+global_settings:
+  random_seed: 42
+
+# DATA GENERATOR MODULE
 dataset_settings:
   n_samples: 1000
   n_initial_features: 5
-  random_state: 42
 
 feature_generation:
   feature_parameters:
@@ -43,3 +48,17 @@ visualisation:
   max_features_to_show: 6
   n_bins: 25
   save_to_dir: null 
+
+# TRAINING
+training_settings:
+  data_path: "data/dataset.csv"
+  target_column: "target"
+  model_path: "models/mlp_model.pt"
+  test_set_ratio: 0.2  # 20% of data for the final test set
+  validation_set_ratio: 0.2 # 20% of data for the validation set
+  hyperparameters:
+    hidden_size: 64
+    output_size: 1
+    learning_rate: 0.001
+    epochs: 50
+    batch_size: 32

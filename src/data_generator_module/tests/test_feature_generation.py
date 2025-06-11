@@ -2,11 +2,10 @@
 Tests for feature generation functionality with specific parameter configurations.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
 
-from generator_package.gaussian_data_generator import GaussianDataGenerator
+from data_generator_module.gaussian_data_generator import GaussianDataGenerator
 
 
 class TestFeatureGeneration:

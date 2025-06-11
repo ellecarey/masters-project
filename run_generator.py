@@ -4,6 +4,7 @@ from src.data_generator_module import (
     utils,
     config as path_config,
 )
+from src.training_module.utils import set_global_seed
 
 
 def main():
@@ -24,12 +25,15 @@ def main():
         print(f"Error loading or parsing {config_path}: {e}")
         return
 
+    global_seed = config["global_settings"]["random_seed"]
+    set_global_seed(global_seed)
+
     # Initialise the generator using dataset-wide settings
     dataset_settings = config["dataset_settings"]
     generator = GaussianDataGenerator(
         n_samples=dataset_settings["n_samples"],
         n_features=dataset_settings["n_initial_features"],
-        random_state=dataset_settings["random_state"],
+        random_state=global_seed,
     )
 
     # Execute the data generation pipeline by unpacking config dictionaries

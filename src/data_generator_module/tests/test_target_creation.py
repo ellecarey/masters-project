@@ -4,8 +4,6 @@ Tests for target variable creation functionality - Condensed Version
 
 import pytest
 import numpy as np
-import pandas as pd
-from generator_package.gaussian_data_generator import GaussianDataGenerator
 
 
 class TestTargetCreation:
