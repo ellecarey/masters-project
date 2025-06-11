@@ -1,5 +1,9 @@
 import os
-from src.generator_package import GaussianDataGenerator, utils, config as path_config
+from src.data_generator_module import (
+    GaussianDataGenerator,
+    utils,
+    config as path_config,
+)
 
 
 def main():
