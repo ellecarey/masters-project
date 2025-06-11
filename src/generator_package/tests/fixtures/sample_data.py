@@ -47,11 +47,10 @@ DATASET_CONFIGS = {
 }
 
 # Perturbation scale constants with descriptive names
-PERTURBATION_LEVELS = {
-    "noise_free": 0.0,
-    "minimal_noise": 0.01,
-    "low_noise": 0.05,
-    "realistic_noise": 0.1,
+FEATURE_NOISE_LEVELS = {
+    "no_noise": 0.0,
+    "low_noise": 0.01,
+    "medium_noise": 0.1,
     "high_noise": 0.3,
     "extreme_noise": 1.0,
 }
@@ -63,12 +62,13 @@ TARGET_WEIGHTS = [1.0, -0.5, 0.3, 2.5, -1.8, 0.7, -0.2, 1.1]
 FUNCTION_TYPES = ["linear", "polynomial", "logistic"]
 
 # Noise levels for target creation with explicit values
+
 TARGET_NOISE_LEVELS = {
     "no_noise": 0.0,
-    "minimal_noise": 0.05,
-    "standard_noise": 0.1,
+    "low_noise": 0.01,
+    "medium_noise": 0.1,
     "high_noise": 0.3,
-    "extreme_noise": 0.5,
+    "extreme_noise": 1.0,
 }
 
 # Random states for reproducibility testing
