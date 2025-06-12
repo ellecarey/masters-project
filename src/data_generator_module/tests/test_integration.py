@@ -4,6 +4,17 @@ Integration tests for complete workflows
 
 import pytest
 import pandas as pd
+from data_generator_module.config import (
+    FEATURE_GENERATION_SETTINGS,
+    PERTURBATION_SETTINGS,
+    CREATE_TARGET_SETTINGS,
+    DATASET_SETTINGS,
+)
+from .fixtures.sample_data import (
+    TARGET_WEIGHTS,
+    TARGET_NOISE_LEVELS,
+    FEATURE_NOISE_LEVELS,
+)
 
 
 class TestIntegration:
@@ -16,12 +27,6 @@ class TestIntegration:
         standard_test_config,
     ):
         """Test complete workflow, config integration, and reproducibility"""
-        from .fixtures.sample_data import (
-            TARGET_WEIGHTS,
-            TARGET_NOISE_LEVELS,
-            FEATURE_NOISE_LEVELS,
-        )
-
         # Test basic workflow with fixture parameters
         generator = generator_factory(
             n_samples=standard_test_config["samples"],
@@ -115,13 +120,6 @@ class TestIntegration:
 
         # Test config integration if available
         try:
-            from generator_package.config import (
-                FEATURE_GENERATION_SETTINGS,
-                PERTURBATION_SETTINGS,
-                CREATE_TARGET_SETTINGS,
-                DATASET_SETTINGS,
-            )
-
             # Create generator using actual config
             config_gen = generator_factory(
                 n_samples=DATASET_SETTINGS["n_samples"],
@@ -165,14 +163,7 @@ class TestIntegration:
     def test_neural_network_research_pipeline(
         self, generator_factory, sample_feature_params, sample_feature_types, test_seeds
     ):
-        """Test complete pipeline for neural network error propagation research"""
-        from .fixtures.sample_data import (
-            TARGET_WEIGHTS,
-            TARGET_NOISE_LEVELS,
-            FEATURE_NOISE_LEVELS,
-        )
-
-        # Test multiple noise levels for error propagation study
+        """Test complete pipeline for neural network error propagation"""
         research_configs = [
             {
                 "samples": 100,
@@ -343,7 +334,6 @@ class TestIntegration:
             )
 
         # Test that large dataset can handle additional operations
-        from .fixtures.sample_data import FEATURE_NOISE_LEVELS
 
         # Should be able to add perturbations to large dataset
         available_features = large_dataset.data.columns.tolist()[:3]

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from data_generator_module.gaussian_data_generator import GaussianDataGenerator
+from .fixtures.sample_data import DATASET_CONFIGS
 
 
 class TestFeatureGeneration:
@@ -212,7 +213,6 @@ class TestFeatureGeneration:
         large_dataset,
     ):
         """Test feature generation across all dataset configurations including performance"""
-        from .fixtures.sample_data import DATASET_CONFIGS
 
         # Test all standard dataset configurations
         for config_name, config in DATASET_CONFIGS.items():

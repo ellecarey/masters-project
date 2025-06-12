@@ -11,7 +11,7 @@ def main():
     """
     Runs the data generation pipeline using settings from a YAML file.
     """
-    # 1. Load the generation recipe from the YAML configuration file
+    # Load the generation recipe from the YAML configuration file
     try:
         config_path = "config.yml"
         config = utils.load_yaml_config(config_path)
