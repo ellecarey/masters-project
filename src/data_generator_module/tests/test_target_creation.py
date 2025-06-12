@@ -4,18 +4,17 @@ Tests for target variable creation functionality - Condensed Version
 
 import pytest
 import numpy as np
+from .fixtures.sample_data import (
+    TARGET_WEIGHTS,
+    TARGET_NOISE_LEVELS,
+)
 
 
 class TestTargetCreation:
     def test_core_function_types_and_linear_validation(
         self, generator_factory, sample_feature_params, sample_feature_types
     ):
-        """Test all function types with exact linear validation - consolidated test"""
-        from .fixtures.sample_data import (
-            TARGET_WEIGHTS,
-            TARGET_NOISE_LEVELS,
-            FUNCTION_TYPES,
-        )
+        """Test all function types with exact linear validation"""
 
         gen = generator_factory(n_samples=100, n_features=len(sample_feature_params))
         gen.generate_features(sample_feature_params, sample_feature_types)
@@ -67,9 +66,7 @@ class TestTargetCreation:
     def test_noise_levels_and_reproducibility(
         self, generator_factory, sample_feature_params, sample_feature_types, test_seeds
     ):
-        """Test noise impact and reproducibility - consolidated test"""
-        from .fixtures.sample_data import TARGET_WEIGHTS, TARGET_NOISE_LEVELS
-
+        """Test noise impact and reproducibility"""
         features_to_use = list(sample_feature_params.keys())[:2]
         weights = TARGET_WEIGHTS[: len(features_to_use)]
         seed = test_seeds[0]
@@ -123,8 +120,7 @@ class TestTargetCreation:
     def test_comprehensive_validation_and_structure(
         self, generator_with_sample_data, sample_feature_params, sample_feature_types
     ):
-        """Test validation errors, structure preservation, and mixed features - consolidated test"""
-        from .fixtures.sample_data import TARGET_WEIGHTS, TARGET_NOISE_LEVELS
+        """Test validation errors, structure preservation, and mixed features"""
 
         valid_features = list(sample_feature_params.keys())[:2]
         valid_weights = TARGET_WEIGHTS[: len(valid_features)]
@@ -161,7 +157,6 @@ class TestTargetCreation:
 
         # Test structure preservation and mixed features
         original_shape = generator_with_sample_data.data.shape
-        original_columns = generator_with_sample_data.data.columns.tolist()
 
         # Use mix of continuous and discrete features
         continuous_features = [
@@ -196,10 +191,7 @@ class TestTargetCreation:
         sample_feature_types,
         standard_test_config,
     ):
-        """Test comprehensive neural network error propagation research scenarios"""
-        from .fixtures.sample_data import TARGET_WEIGHTS, TARGET_NOISE_LEVELS
-
-        # Test multiple scenarios for neural network research
+        """Test multiple scenarios for neural network research"""
         research_scenarios = [
             ("linear", "low_noise", "Simple regression for baseline NN training"),
             (
