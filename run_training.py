@@ -1,4 +1,5 @@
 import os
+import argparse
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -19,9 +20,20 @@ def main():
     Main function to run the MLP model training pipeline with train/val/test splits.
     It dynamically finds the dataset and saves the model based on the config.
     """
+    parser = argparse.ArgumentParser(description="Run the model training pipeline.")
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yml",
+        help="Path to the configuration YAML file for the experiment (default: config.yml)",
+    )
+    args = parser.parse_args()
+
     # Load config and set up reproducibility
     try:
-        config = data_utils.load_yaml_config("config.yml")
+        config_path = args.config
+        config = data_utils.load_yaml_config(config_path)
         train_config = config["training_settings"]
         hyperparams = train_config["hyperparameters"]
         print("Successfully loaded configuration.")

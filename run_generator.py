@@ -1,4 +1,5 @@
 import os
+import argparse
 from src.data_generator_module import GaussianDataGenerator, utils
 from src.training_module.utils import set_global_seed
 from src.data_generator_module.utils import (
@@ -13,9 +14,19 @@ def main():
     This script generates a dataset and associated plots with names
     derived from the experiment's configuration.
     """
+    parser = argparse.ArgumentParser(description="Run the data generation pipeline.")
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yml",
+        help="Path to the configuration YAML file (default: config.yml)",
+    )
+    args = parser.parse_args()
+
     # Load configuration and set up reproducibility
     try:
-        config_path = "config.yml"
+        config_path = args.config
         config = utils.load_yaml_config(config_path)
         print(f"Successfully loaded configuration from {config_path}")
     except FileNotFoundError:
