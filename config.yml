@@ -25,7 +25,7 @@ feature_generation:
 
 perturbation:
   perturbation_type: "gaussian"
-  features: ["feature_0", "feature_1"] 
+  features: ["feature_0", "feature_1"]
   scale: 0.15
 
 add_features:
@@ -44,18 +44,19 @@ create_target:
   function_type: "polynomial"
 
 visualisation:
-  features: ["feature_0", "feature_1", "feature_2", "feature_3"] 
+  features: ["feature_0", "feature_1", "feature_2", "feature_3"]
   max_features_to_show: 6
   n_bins: 25
-  save_to_dir: null 
+  # --- FIX 1: Corrected syntax and path format ---
+  save_to_dir: "reports/figures/"
 
 # TRAINING
 training_settings:
-  data_path: "data/dataset.csv"
+  output_data_dir: "data/"
   target_column: "target"
-  model_path: "models/mlp_model.pt"
-  test_set_ratio: 0.2  # 20% of data for the final test set
-  validation_set_ratio: 0.2 # 20% of data for the validation set
+  model_output_dir: "models/"
+  test_set_ratio: 0.2
+  validation_set_ratio: 0.2
   hyperparameters:
     hidden_size: 64
     output_size: 1

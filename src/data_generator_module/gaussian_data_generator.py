@@ -285,7 +285,7 @@ class GaussianDataGenerator:
         features: List[str],
         max_features_to_show: int,
         n_bins: int,
-        save_to_dir: Optional[str],
+        save_to_path: Optional[str],
     ):
         """Visualise the distribution of selected features."""
 
@@ -327,17 +327,17 @@ class GaussianDataGenerator:
 
         plt.tight_layout()
 
-        if save_to_dir:
+        if save_to_path:
             # Define filename
-            filename = "feature_distributions_plot.pdf"
-            filepath = os.path.join(save_to_dir, filename)
+            output_dir = os.path.dirname(save_to_path)
+            os.makedirs(output_dir, exist_ok=True)
 
             plt.savefig(
-                filepath,
+                save_to_path,
                 dpi=300,
                 bbox_inches="tight",
             )
-            print(f"Feature visualisation successfully saved to {filepath}")
+            print(f"Feature visualisation successfully saved to {save_to_path}")
         else:
             plt.show()
 
