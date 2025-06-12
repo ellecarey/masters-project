@@ -124,7 +124,6 @@ def different_seed_generators(standard_test_config):
 
 # Performance testing fixture
 @pytest.fixture
-@pytest.mark.slow
 def large_dataset():
     """Larger dataset for performance testing using config values"""
     config = DATASET_CONFIGS.get(
