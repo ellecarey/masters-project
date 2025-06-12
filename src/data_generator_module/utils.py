@@ -47,3 +47,40 @@ def get_project_paths():
         "src_path": os.path.join(project_root, "src"),
     }
     return paths
+
+
+def create_filename_from_config(config: dict) -> str:
+    """
+    Generates a descriptive filename prefix from the configuration dictionary.
+    """
+    try:
+        # Extract key parameters from the config
+        ds_settings = config.get("dataset_settings", {})
+        n_samples = ds_settings.get("n_samples", "N/A")
+        n_initial = ds_settings.get("n_initial_features", "N/A")
+
+        add_features_settings = config.get("add_features", {})
+        n_added = add_features_settings.get("n_new_features", 0)
+
+        pert_settings = config.get("perturbation", {})
+        pert_type = pert_settings.get("perturbation_type", "none")
+        pert_scale = pert_settings.get("scale", 0)
+
+        target_settings = config.get("create_target", {})
+        func_type = target_settings.get("function_type", "linear")
+
+        # Sanitise perturbation scale for filename
+        scale_str = str(pert_scale).replace(".", "p")
+
+        # Construct the filename
+        # e.g., n1000_f_init5_add2_pert-gaussian_scl0p15_func-polynomial
+        filename = (
+            f"n{n_samples}_"
+            f"f_init{n_initial}_add{n_added}_"
+            f"pert-{pert_type}_scl{scale_str}_"
+            f"func-{func_type}"
+        )
+        return filename
+    except Exception:
+        # Fallback to a generic name if config structure is unexpected
+        return "manually_name_dataset"
