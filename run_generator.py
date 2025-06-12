@@ -1,7 +1,10 @@
 import os
 from src.data_generator_module import GaussianDataGenerator, utils
 from src.training_module.utils import set_global_seed
-from src.data_generator_module.utils import create_filename_from_config
+from src.data_generator_module.utils import (
+    create_filename_from_config,
+    create_plot_title_from_config,
+)
 
 
 def main():
@@ -64,6 +67,8 @@ def main():
     if "visualisation" in config:
         vis_config = config["visualisation"]
 
+        main_title, subtitle = create_plot_title_from_config(config)
+
         # Get the output directory from the config
         plot_dir = vis_config.get("save_to_dir")
 
@@ -77,6 +82,8 @@ def main():
                 max_features_to_show=vis_config["max_features_to_show"],
                 n_bins=vis_config["n_bins"],
                 save_to_path=plot_filepath,
+                title=main_title,
+                subtitle=subtitle,
             )
 
     print("\nData generation pipeline finished successfully.")
