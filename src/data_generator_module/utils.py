@@ -83,4 +83,47 @@ def create_filename_from_config(config: dict) -> str:
         return filename
     except Exception:
         # Fallback to a generic name if config structure is unexpected
-        return "manually_name_dataset"
+        return "auto_filename_generation_failed"
+
+
+def create_plot_title_from_config(config: dict) -> tuple[str, str]:
+    """
+    Generates a human-readable title and subtitle for plots from the config.
+    """
+    try:
+        # Main Title
+        main_title = "Distribution of Generated Features"
+
+        # Subtitle Components
+        ds_settings = config.get("dataset_settings", {})
+        n_samples = ds_settings.get("n_samples", "N/A")
+
+        # Calculate total features
+        n_initial = ds_settings.get("n_initial_features", 0)
+        n_added = config.get("add_features", {}).get("n_new_features", 0)
+        total_features = n_initial + n_added
+
+        # Perturbation description
+        pert_settings = config.get("perturbation", {})
+        pert_type = pert_settings.get("perturbation_type", "none")
+        if pert_type != "none":
+            pert_scale = pert_settings.get("scale", 0)
+            pert_desc = f"Perturbation: {pert_type.capitalize()} (Scale: {pert_scale})"
+        else:
+            pert_desc = "No Perturbations"
+
+        # Target variable description
+        func_type = config.get("create_target", {}).get("function_type", "N/A")
+        target_desc = f"Target: {func_type.capitalize()} Relationship"
+
+        # Assemble the subtitle
+        subtitle = (
+            f"Dataset: {n_samples} Samples, {total_features} Features | "
+            f"{pert_desc} | {target_desc}"
+        )
+
+        return main_title, subtitle
+
+    except Exception:
+        # Fallback if the config structure is unexpected
+        return "Feature Distribution", "Configuration details unavailable"

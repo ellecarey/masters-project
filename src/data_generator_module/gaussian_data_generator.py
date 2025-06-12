@@ -286,6 +286,8 @@ class GaussianDataGenerator:
         max_features_to_show: int,
         n_bins: int,
         save_to_path: Optional[str],
+        title: Optional[str] = None,
+        subtitle: Optional[str] = None,
     ):
         """Visualise the distribution of selected features."""
 
@@ -302,7 +304,7 @@ class GaussianDataGenerator:
         n_cols = min(3, n_features)
         n_rows = (n_features + n_cols - 1) // n_cols
 
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows))
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows + 1))
 
         # Handle case where there's only one subplot
         if n_features == 1:
@@ -311,6 +313,11 @@ class GaussianDataGenerator:
             axes = axes.flatten()
         else:
             axes = axes.flatten()
+
+        if title:
+            fig.suptitle(title, fontsize=20, weight="bold")
+        if subtitle:
+            plt.figtext(0.5, 0.92, subtitle, ha="center", fontsize=14, style="italic")
 
         # Plot histograms
         for i, feature in enumerate(features_to_plot):
@@ -325,7 +332,7 @@ class GaussianDataGenerator:
         for i in range(n_features, len(axes)):
             axes[i].set_visible(False)
 
-        plt.tight_layout()
+        fig.tight_layout(rect=[0, 0.03, 1, 0.92])
 
         if save_to_path:
             # Define filename
