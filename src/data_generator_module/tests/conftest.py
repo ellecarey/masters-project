@@ -13,6 +13,20 @@ from .fixtures.sample_data import (
 
 
 @pytest.fixture
+def sample_config():
+    """
+    A shared, standard configuration fixture for data generator tests.
+    This fixture is now available to all tests in this directory.
+    """
+    return {
+        "dataset_settings": {"n_samples": 1000, "n_initial_features": 5},
+        "add_features": {"n_new_features": 2},
+        "perturbation": {"perturbation_type": "gaussian", "scale": 0.15},
+        "create_target": {"function_type": "polynomial"},
+    }
+
+
+@pytest.fixture
 def basic_generator():
     """Basic generator instance for testing"""
     return GaussianDataGenerator(

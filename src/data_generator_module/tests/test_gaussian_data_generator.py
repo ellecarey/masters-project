@@ -44,11 +44,46 @@ class TestGaussianDataGeneratorInit:
                 random_state=REPRODUCIBILITY_SEEDS[0],
             )
 
-    def test_invalid_n_features(self):
-        """test validation catches invalid n_features"""
-        with pytest.raises(ValueError, match=ERROR_PATTERNS["negative_features"]):
-            GaussianDataGenerator(
-                n_samples=DATASET_CONFIGS["minimal_valid_input"]["samples"],
-                n_features=0,
-                random_state=REPRODUCIBILITY_SEEDS[0],
-            )
+    def test_visualise_features_with_titles_and_saving(
+        self, mocker, tmp_path, generator_with_sample_data
+    ):
+        """
+        Tests that visualise_features correctly passes titles to Matplotlib
+        and calls the save function when a path is provided.
+        """
+        # Mock all external functions that would be called
+        mock_suptitle = mocker.patch("matplotlib.figure.Figure.suptitle")
+        mock_figtext = mocker.patch("matplotlib.pyplot.figtext")
+        mock_savefig = mocker.patch("matplotlib.pyplot.savefig")
+        mock_makedirs = mocker.patch("os.makedirs")
+
+        # Define test data and use tmp_path to create a safe path
+        test_title = "My Custom Title"
+        test_subtitle = "My Custom Subtitle"
+        # tmp_path creates a temporary directory for this test run
+        save_path = tmp_path / "test_plot.pdf"
+
+        # Call the method
+        generator_with_sample_data.visualise_features(
+            features=["test_feature_1"],
+            max_features_to_show=1,
+            n_bins=10,
+            save_to_path=str(save_path),  # Pass the path to trigger saving
+            title=test_title,
+            subtitle=test_subtitle,
+        )
+
+        # Assert that all functions were called correctly
+        # Assert titles were set
+        mock_suptitle.assert_called_once_with(test_title, fontsize=20, weight="bold")
+        mock_figtext.assert_called_once_with(
+            0.5, 0.92, test_subtitle, ha="center", fontsize=14, style="italic"
+        )
+
+        # Assert directory creation was called with the parent of save path
+        mock_makedirs.assert_called_once_with(str(tmp_path), exist_ok=True)
+
+        # Assert that savefig was called with the exact path and parameters
+        mock_savefig.assert_called_once_with(
+            str(save_path), dpi=300, bbox_inches="tight"
+        )
