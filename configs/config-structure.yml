@@ -6,7 +6,7 @@ global_settings:
 
 # DATA GENERATOR MODULE
 dataset_settings:
-  n_samples: 1000
+  n_samples: 1000 
   n_initial_features: 5
 
 feature_generation:
