@@ -53,37 +53,65 @@ def create_filename_from_config(config: dict) -> str:
     """
     Generates a descriptive filename prefix from the configuration dictionary.
     """
-    try:
-        # Extract key parameters from the config
-        ds_settings = config.get("dataset_settings", {})
-        n_samples = ds_settings.get("n_samples", "N/A")
-        n_initial = ds_settings.get("n_initial_features", "N/A")
+    # Extract dataset settings
+    dataset_settings = config.get("dataset_settings", {})
+    n_samples = dataset_settings.get("n_samples", 1000)
+    n_initial_features = dataset_settings.get("n_initial_features", 5)
 
-        add_features_settings = config.get("add_features", {})
-        n_added = add_features_settings.get("n_new_features", 0)
+    # Extract feature type distribution from feature_generation
+    feature_generation = config.get("feature_generation", {})
+    feature_types = feature_generation.get("feature_types", {})
 
-        pert_settings = config.get("perturbation", {})
-        pert_type = pert_settings.get("perturbation_type", "none")
-        pert_scale = pert_settings.get("scale", 0)
+    # Count feature types
+    continuous_count = sum(
+        1 for ftype in feature_types.values() if ftype == "continuous"
+    )
+    discrete_count = sum(1 for ftype in feature_types.values() if ftype == "discrete")
 
-        target_settings = config.get("create_target", {})
-        func_type = target_settings.get("function_type", "linear")
+    # Extract additional features
+    add_features = config.get("add_features", {})
+    n_new_features = add_features.get("n_new_features", 0)
 
-        # Sanitise perturbation scale for filename
-        scale_str = str(pert_scale).replace(".", "p")
-
-        # Construct the filename
-        # e.g., n1000_f_init5_add2_pert-gaussian_scl0p15_func-polynomial
-        filename = (
-            f"n{n_samples}_"
-            f"f_init{n_initial}_add{n_added}_"
-            f"pert-{pert_type}_scl{scale_str}_"
-            f"func-{func_type}"
+    # Count additional feature types if they exist
+    add_continuous = 0
+    add_discrete = 0
+    if n_new_features > 0:
+        add_feature_types = add_features.get("feature_types", {})
+        add_continuous = sum(
+            1 for ftype in add_feature_types.values() if ftype == "continuous"
         )
-        return filename
-    except Exception:
-        # Fallback to a generic name if config structure is unexpected
-        return "auto_filename_generation_failed"
+        add_discrete = sum(
+            1 for ftype in add_feature_types.values() if ftype == "discrete"
+        )
+
+    # Total feature type counts
+    total_continuous = continuous_count + add_continuous
+    total_discrete = discrete_count + add_discrete
+
+    # Extract perturbation settings
+    perturbation = config.get("perturbation", {})
+    perturbation_type = perturbation.get("perturbation_type", "none")
+    perturbation_scale = perturbation.get("scale", 0)
+
+    # Extract target settings
+    target = config.get("create_target", {})
+    function_type = target.get("function_type", "linear")
+    noise_level = target.get("noise_level", 0.1)
+
+    # Create filename components with feature type distribution
+    filename_parts = [
+        f"n{n_samples}",
+        f"f_init{n_initial_features}",
+        f"cont{total_continuous}",
+        f"disc{total_discrete}",
+        f"add{n_new_features}",
+        f"pert-{perturbation_type}",
+        f"scl{str(perturbation_scale).replace('.', 'p')}",
+        f"func-{function_type}",
+        f"noise{str(noise_level).replace('.', 'p')}",
+    ]
+
+    return "_".join(filename_parts)
 
 
 def create_plot_title_from_config(config: dict) -> tuple[str, str]:

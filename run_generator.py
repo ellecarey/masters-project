@@ -1,9 +1,9 @@
 import os
 import argparse
-from pathlib import Path
 from src.data_generator_module import GaussianDataGenerator, utils
 from src.training_module.utils import set_global_seed
 from src.data_generator_module.utils import (
+    create_filename_from_config,
     create_plot_title_from_config,
 )
 
@@ -12,7 +12,7 @@ def main():
     """
     Runs the data generation pipeline using settings from a YAML file.
     This script generates a dataset and associated plots with names
-    derived from the config file name.
+    derived from the experiment's configuration.
     """
     parser = argparse.ArgumentParser(description="Run the data generation pipeline.")
     parser.add_argument(
@@ -42,9 +42,8 @@ def main():
     global_seed = config["global_settings"]["random_seed"]
     set_global_seed(global_seed)
 
-    # Generate experiment name from config file name instead of config contents
-    config_file_path = Path(config_path)
-    experiment_name = config_file_path.stem  # Gets filename without extension
+    # Generate a unique name for this experiment from the config
+    experiment_name = create_filename_from_config(config)
     print(f"Generated experiment name: {experiment_name}")
 
     # 3. Initialise the data generator
@@ -70,12 +69,12 @@ def main():
 
     print("Pipeline finished generating data.")
 
-    # Save the generated dataset with the config file name
+    # Save the generated dataset with the dynamic filename
     output_data_dir = config["training_settings"]["output_data_dir"]
     dataset_filepath = os.path.join(output_data_dir, f"{experiment_name}_dataset.csv")
     generator.save_data(file_path=dataset_filepath)
 
-    # Visualise features and save the plot with the config file name
+    # Visualise features and save the plot with the dynamic filename
     if "visualisation" in config:
         vis_config = config["visualisation"]
 

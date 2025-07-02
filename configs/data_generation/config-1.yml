@@ -30,26 +30,26 @@ feature_generation:
     feature_18: {mean: -12.0, std: 3.2}
     feature_19: {mean: 18.0, std: 3.8}
   feature_types:
-    feature_0: "continuous"
-    feature_1: "continuous"
-    feature_2: "continuous"
-    feature_3: "continuous"
-    feature_4: "continuous"
-    feature_5: "continuous"
-    feature_6: "continuous"
-    feature_7: "continuous"
-    feature_8: "continuous"
-    feature_9: "continuous"
-    feature_10: "continuous"
-    feature_11: "continuous"
-    feature_12: "continuous"
-    feature_13: "continuous"
-    feature_14: "continuous"
-    feature_15: "continuous"
-    feature_16: "continuous"
-    feature_17: "continuous"
-    feature_18: "continuous"
-    feature_19: "continuous"
+    feature_0: "discrete"
+    feature_1: "discrete"
+    feature_2: "discrete"
+    feature_3: "discrete"
+    feature_4: "discrete"
+    feature_5: "discrete"
+    feature_6: "discrete"
+    feature_7: "discrete"
+    feature_8: "discrete"
+    feature_9: "discrete"
+    feature_10: "discrete"
+    feature_11: "discrete"
+    feature_12: "discrete"
+    feature_13: "discrete"
+    feature_14: "discrete"
+    feature_15: "discrete"
+    feature_16: "discrete"
+    feature_17: "discrete"
+    feature_18: "discrete"
+    feature_19: "discrete"
 
 
 create_target:
@@ -59,6 +59,7 @@ create_target:
   function_type: "linear"
 
 visualisation:
+  features: ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4", "feature_5", "feature_6", "feature_7", "feature_8", "feature_9", "feature_10", "feature_11", "feature_12", "feature_13", "feature_14", "feature_15", "feature_16", "feature_17", "feature_18", "feature_19"]
   max_features_to_show: 20
   n_bins: 25
   # --- FIX 1: Corrected syntax and path format ---
