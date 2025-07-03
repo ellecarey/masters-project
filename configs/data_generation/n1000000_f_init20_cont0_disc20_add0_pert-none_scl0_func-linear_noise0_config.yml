@@ -64,3 +64,4 @@ visualisation:
   n_bins: 25
 
   save_to_dir: "reports/figures/"
+

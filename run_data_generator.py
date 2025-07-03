@@ -5,6 +5,7 @@ from src.training_module.utils import set_global_seed
 from src.data_generator_module.utils import (
     create_filename_from_config,
     create_plot_title_from_config,
+    rename_config_file,
 )
 
 
@@ -21,6 +22,11 @@ def main():
         type=str,
         default="config.yml",
         help="Path to the configuration YAML file (default: config.yml)",
+    )
+    parser.add_argument(
+        "--keep-original-name",
+        action="store_true",
+        help="Keep original config filename (don't rename)",
     )
     args = parser.parse_args()
 
@@ -43,11 +49,10 @@ def main():
     set_global_seed(global_seed)
 
     # Generate a unique name for this experiment from the config
-    config_file_path = os.path.basename(config_path)
-    experiment_name = os.path.splitext(config_file_path)[0]
+    experiment_name = create_filename_from_config(config)
     print(f"Generated experiment name: {experiment_name}")
 
-    # 3. Initialise the data generator
+    # Initialise the data generator
     dataset_settings = config["dataset_settings"]
     generator = GaussianDataGenerator(
         n_samples=dataset_settings["n_samples"],
@@ -71,7 +76,9 @@ def main():
     print("Pipeline finished generating data.")
 
     # Save the generated dataset with the dynamic filename
-    output_data_dir = config["training_settings"]["output_data_dir"]
+    # Use output_settings from data generation config, or fallback to default
+    output_settings = config.get("output_settings", {"data_dir": "data/"})
+    output_data_dir = output_settings.get("data_dir", "data/")
     dataset_filepath = os.path.join(output_data_dir, f"{experiment_name}_dataset.csv")
     generator.save_data(file_path=dataset_filepath)
 
@@ -88,15 +95,34 @@ def main():
             # Construct the full, unique path for the plot
             plot_filepath = os.path.join(plot_dir, f"{experiment_name}_plot.pdf")
 
+            # Get features for visualisation - handle missing 'features' key
+            if "features" in vis_config:
+                features_to_show = vis_config["features"]
+            else:
+                # Auto-generate features list from feature_generation section
+                feature_generation = config.get("feature_generation", {})
+                all_features = list(
+                    feature_generation.get("feature_parameters", {}).keys()
+                )
+                max_features = vis_config.get("max_features_to_show", 6)
+                features_to_show = all_features[:max_features]
+
             # visualise features
             generator.visualise_features(
-                features=vis_config["features"],
+                features=features_to_show,
                 max_features_to_show=vis_config["max_features_to_show"],
                 n_bins=vis_config["n_bins"],
                 save_to_path=plot_filepath,
                 title=main_title,
                 subtitle=subtitle,
             )
+
+    # Rename configuration file to match generated files (unless disabled)
+    if not args.keep_original_name:
+        renamed_config_path = rename_config_file(config_path, experiment_name)
+        print(f"Configuration file available at: {renamed_config_path}")
+    else:
+        print(f"Configuration file kept at original location: {config_path}")
 
     print("\nData generation pipeline finished successfully.")
 

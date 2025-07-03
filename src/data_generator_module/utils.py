@@ -1,4 +1,9 @@
+"""
+Utility functions for the data generator module.
+"""
+
 import os
+import shutil
 from pathlib import Path
 import yaml
 
@@ -8,8 +13,8 @@ def find_project_root():
     # Start from the directory of this file (__file__).
     current_path = Path(__file__).resolve()
 
-    # Define project root markers. These files exist in your project's root.
-    markers = [".git", "pyproject.toml", "README.md", "run_generator.py"]
+    # Define project root markers.
+    markers = [".git", "pyproject.toml", "README.md", "run_data_generator.py"]
 
     for parent in current_path.parents:
         # Check if any marker file exists in the current parent directory.
@@ -35,7 +40,6 @@ def load_yaml_config(config_path: str) -> dict:
     return config
 
 
-# This function might also be in your utils.py and it should stay the same
 def get_project_paths():
     """Gets a dictionary of important project paths."""
     project_root = find_project_root()
@@ -51,7 +55,7 @@ def get_project_paths():
 
 def create_filename_from_config(config: dict) -> str:
     """
-    Generates a descriptive filename prefix from the configuration dictionary.
+    Create a unique filename based on configuration parameters including feature type distribution.
     """
     # Extract dataset settings
     dataset_settings = config.get("dataset_settings", {})
@@ -63,10 +67,8 @@ def create_filename_from_config(config: dict) -> str:
     feature_types = feature_generation.get("feature_types", {})
 
     # Count feature types
-    continuous_count = sum(
-        1 for ftype in feature_types.values() if ftype == "continuous"
-    )
-    discrete_count = sum(1 for ftype in feature_types.values() if ftype == "discrete")
+    continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
+    discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
 
     # Extract additional features
     add_features = config.get("add_features", {})
@@ -78,11 +80,9 @@ def create_filename_from_config(config: dict) -> str:
     if n_new_features > 0:
         add_feature_types = add_features.get("feature_types", {})
         add_continuous = sum(
-            1 for ftype in add_feature_types.values() if ftype == "continuous"
+            1 for ft in add_feature_types.values() if ft == "continuous"
         )
-        add_discrete = sum(
-            1 for ftype in add_feature_types.values() if ftype == "discrete"
-        )
+        add_discrete = sum(1 for ft in add_feature_types.values() if ft == "discrete")
 
     # Total feature type counts
     total_continuous = continuous_count + add_continuous
@@ -146,7 +146,7 @@ def create_plot_title_from_config(config: dict) -> tuple[str, str]:
 
         # Assemble the subtitle
         subtitle = (
-            f"Dataset: {n_samples} Samples, {total_features} Features | "
+            f"Dataset: {n_samples:,} Samples, {total_features} Features | "
             f"{pert_desc} | {target_desc}"
         )
 
@@ -155,3 +155,25 @@ def create_plot_title_from_config(config: dict) -> tuple[str, str]:
     except Exception:
         # Fallback if the config structure is unexpected
         return "Feature Distribution", "Configuration details unavailable"
+
+
+def rename_config_file(original_config_path, experiment_name):
+    """
+    Rename the configuration file to match the generated dataset name.
+    """
+    config_path = Path(original_config_path)
+    config_dir = config_path.parent
+    config_extension = config_path.suffix
+
+    # Create new filename
+    new_config_name = f"{experiment_name}_config{config_extension}"
+    new_config_path = config_dir / new_config_name
+
+    try:
+        # Rename the file
+        shutil.move(str(config_path), str(new_config_path))
+        print(f"Configuration file renamed: {config_path.name} → {new_config_name}")
+        return str(new_config_path)
+    except Exception as e:
+        print(f"Warning: Could not rename config file: {e}")
+        return str(config_path)
