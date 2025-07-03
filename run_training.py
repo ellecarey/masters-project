@@ -17,18 +17,52 @@ from src.training_module.trainer import train_model
 
 def main():
     """
-    Main function to run the MLP model training pipeline with train/val/test splits.
-    It dynamically finds the dataset and saves the model based on the config.
+    Runs the training pipeline using settings from a YAML file.
     """
-    parser = argparse.ArgumentParser(description="Run the model training pipeline.")
+    parser = argparse.ArgumentParser(description="Run the training pipeline.")
     parser.add_argument(
         "--config",
         "-c",
         type=str,
-        default="config.yml",
-        help="Path to the configuration YAML file for the experiment (default: config.yml)",
+        default="configs/training/training-config-1.yaml",
+        help="Path to the training configuration YAML file",
+    )
+    parser.add_argument(
+        "--data",
+        "-d",
+        type=str,
+        help="Override dataset path",
     )
     args = parser.parse_args()
+
+    # Load configuration using training utils
+    try:
+        config = train_utils.load_yaml_config(args.config)
+        print(f"Successfully loaded training configuration from {args.config}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}")
+        return
+
+    # Set the global random seed
+    global_seed = config["global_settings"]["random_seed"]
+    train_utils.set_global_seed(global_seed)
+
+    # Generate experiment name from config file name
+    config_file_path = Path(args.config)
+    experiment_name = config_file_path.stem
+    print(f"Training experiment name: {experiment_name}")
+
+    # Determine data source using training utils
+    if args.data:
+        data_path = args.data
+    else:
+        try:
+            data_path = train_utils.resolve_dataset_path(config)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"Error: {e}")
+            return
+
+    print(f"Loading data from: {data_path}")
 
     # Load config and set up reproducibility
     try:
@@ -107,14 +141,14 @@ def main():
         output_size=hyperparams["output_size"],
     )
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
+    optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
 
     trained_model = train_model(
         model=model,
         train_loader=train_loader,
         validation_loader=val_loader,
         criterion=criterion,
-        optimiser=optimizer,
+        optimiser=optimiser,
         epochs=hyperparams["epochs"],
     )
 

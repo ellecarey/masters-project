@@ -62,19 +62,5 @@ visualisation:
   features: ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4", "feature_5", "feature_6", "feature_7", "feature_8", "feature_9", "feature_10", "feature_11", "feature_12", "feature_13", "feature_14", "feature_15", "feature_16", "feature_17", "feature_18", "feature_19"]
   max_features_to_show: 20
   n_bins: 25
-  # --- FIX 1: Corrected syntax and path format ---
-  save_to_dir: "reports/figures/"
 
-  # TRAINING
-training_settings:
-  output_data_dir: "data/"
-  target_column: "target"
-  model_output_dir: "models/"
-  test_set_ratio: 0.2
-  validation_set_ratio: 0.2
-  hyperparameters:
-    hidden_size: 64
-    output_size: 1
-    learning_rate: 0.001
-    epochs: 50
-    batch_size: 32
+  save_to_dir: "reports/figures/"

@@ -43,7 +43,8 @@ def main():
     set_global_seed(global_seed)
 
     # Generate a unique name for this experiment from the config
-    experiment_name = create_filename_from_config(config)
+    config_file_path = os.path.basename(config_path)
+    experiment_name = os.path.splitext(config_file_path)[0]
     print(f"Generated experiment name: {experiment_name}")
 
     # 3. Initialise the data generator
