@@ -1,0 +1,40 @@
+# GLOBAL
+global_settings:
+  random_seed: 42
+
+# DATA GENERATOR MODULE
+dataset_settings:
+  n_samples: 1000000
+  n_initial_features: 5
+
+feature_generation:
+  feature_parameters:
+    feature_0: {mean: 10.0, std: 2.0}
+    feature_1: {mean: -5.0, std: 1.5}
+    feature_2: {mean: 0.0, std: 2.5}
+    feature_3: {mean: 3.0, std: 1.0}
+    feature_4: {mean: -2.0, std: 0.8}
+
+
+  feature_types:
+    feature_0: "discrete"
+    feature_1: "discrete"
+    feature_2: "discrete"
+    feature_3: "discrete"
+    feature_4: "discrete"
+
+
+
+create_target:
+  features_to_use: ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4"]
+  weights: [3.5, -2.8, 0.1, 5.2, -4.1]
+  noise_level: 0
+  function_type: "linear"
+
+visualisation:
+  features: ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4"]
+  max_features_to_show: 5
+  n_bins: 25
+
+  save_to_dir: "reports/figures/"
+
