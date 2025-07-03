@@ -46,7 +46,7 @@ feature_generation:
 
 create_target:
   features_to_use: ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4", "feature_5", "feature_6", "feature_7", "feature_8", "feature_9", "feature_10", "feature_11", "feature_12", "feature_13", "feature_14"]
-  weights: [3.5, -2.8, 0.1, 5.2, -4.1, 1.7, -0.05, 2.9, -1.2, 0.8, -3.3, 0.4, 4.6, -0.9, 2.1, -5.0, 0.3, 3.8, -1.6, 0.0]
+  weights: [3.5, -2.8, 0.1, 5.2, -4.1, 1.7, -0.05, 2.9, -1.2, 0.8, -3.3, 0.4, 4.6, -0.9, 2.1]
   noise_level: 0
   function_type: "linear"
 
