@@ -1,61 +1,197 @@
-import random
-import numpy as np
-import torch
+"""
+Utility functions for the data generator module.
+"""
+
+import os
+import shutil
+from pathlib import Path
+import yaml
 
 
-def set_global_seed(seed: int):
+def find_project_root():
+    """Find the project root by searching upwards for a marker file."""
+    # Start from the directory of this file (__file__).
+    current_path = Path(__file__).resolve()
+
+    # Define project root markers.
+    markers = [".git", "pyproject.toml", "README.md", "run_data_generator.py"]
+
+    for parent in current_path.parents:
+        # Check if any marker file exists in the current parent directory.
+        if any((parent / marker).exists() for marker in markers):
+            # If a marker is found, we have found the project root.
+            print(f"Project root found at: {parent}")
+            return str(parent)
+
+    # --- FALLBACK ---
+    # Last resort if no markers are found
+    # Assumes a fixed structure: utils.py -> generator_package -> src -> masters-project
+    fallback_path = current_path.parent.parent.parent
+    print(
+        f"Warning: No project root marker found. Using fallback path: {fallback_path}"
+    )
+    return str(fallback_path)
+
+
+def load_yaml_config(config_path: str) -> dict:
+    """Loads a YAML configuration file."""
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+    return config
+
+
+def get_project_paths():
+    """Gets a dictionary of important project paths."""
+    project_root = find_project_root()
+    paths = {
+        "project_root": project_root,
+        "data_path": os.path.join(project_root, "data"),
+        "figures_path": os.path.join(project_root, "reports", "figures"),
+        "notebooks_path": os.path.join(project_root, "notebooks"),
+        "src_path": os.path.join(project_root, "src"),
+    }
+    return paths
+
+
+def create_filename_from_config(config: dict) -> str:
+    """Create a unique filename based on configuration parameters."""
+
+    # Extract dataset settings
+    dataset_settings = config.get("dataset_settings", {})
+    n_samples = dataset_settings.get("n_samples", 1000)
+    n_initial_features = dataset_settings.get("n_initial_features", 5)
+
+    # Extract feature type distribution
+    feature_generation = config.get("feature_generation", {})
+    feature_types = feature_generation.get("feature_types", {})
+
+    continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
+    discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
+
+    # Extract additional features (removed since not needed for signal/noise)
+    n_new_features = 0
+
+    # Extract perturbation settings (removed since not needed for signal/noise)
+    perturbation_type = "none"
+    perturbation_scale = 0
+
+    # Extract target settings - handle both signal/noise and regular targets
+    if "create_signal_noise_target" in config:
+        signal_config = config["create_signal_noise_target"]
+        function_type = f"signal-{signal_config.get('signal_function', 'linear')}"
+        signal_ratio = signal_config.get("signal_ratio", 0.5)
+        noise_level = signal_config.get("noise_level", 0.1)
+        filename_parts = [
+            f"n{n_samples}",
+            f"f_init{n_initial_features}",
+            f"cont{continuous_count}",
+            f"disc{discrete_count}",
+            f"add{n_new_features}",
+            f"pert-{perturbation_type}",
+            f"scl{str(perturbation_scale).replace('.', 'p')}",
+            f"func-{function_type}",
+            f"sig-ratio{str(signal_ratio).replace('.', 'p')}",
+            f"noise{str(noise_level).replace('.', 'p')}",
+        ]
+    else:
+        target = config.get("create_target", {})
+        function_type = target.get("function_type", "linear")
+        noise_level = target.get("noise_level", 0.1)
+
+        if function_type == "signal_noise":
+            signal_ratio = target.get("signal_ratio", 0.5)
+            filename_parts = [
+                f"n{n_samples}",
+                f"f_init{n_initial_features}",
+                f"cont{continuous_count}",
+                f"disc{discrete_count}",
+                f"add{n_new_features}",
+                f"pert-{perturbation_type}",
+                f"scl{str(perturbation_scale).replace('.', 'p')}",
+                f"func-{function_type}",
+                f"sig-ratio{str(signal_ratio).replace('.', 'p')}",
+                f"noise{str(noise_level).replace('.', 'p')}",
+            ]
+        else:
+            # Original logic for regression targets
+            filename_parts = [
+                f"n{n_samples}",
+                f"f_init{n_initial_features}",
+                f"cont{continuous_count}",
+                f"disc{discrete_count}",
+                f"add{n_new_features}",
+                f"pert-{perturbation_type}",
+                f"scl{str(perturbation_scale).replace('.', 'p')}",
+                f"func-{function_type}",
+                f"noise{str(noise_level).replace('.', 'p')}",
+            ]
+
+    return "_".join(filename_parts)
+
+
+def create_plot_title_from_config(config: dict) -> tuple[str, str]:
     """
-    Sets the random seed for Python, NumPy, and PyTorch to ensure reproducibility.
+    Generates a human-readable title and subtitle for plots from the config.
     """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    try:
+        # Main Title
+        main_title = "Distribution of Generated Features"
 
-    # For GPU operations, if you are using one
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # for multi-GPU
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        # Subtitle Components
+        ds_settings = config.get("dataset_settings", {})
+        n_samples = ds_settings.get("n_samples", "N/A")
 
-    print(f"Global random seed set to {seed}")
+        # Calculate total features
+        n_initial = ds_settings.get("n_initial_features", 0)
+        n_added = 0  # Removed add_features for signal/noise approach
+        total_features = n_initial + n_added
 
+        # Perturbation description (removed for signal/noise)
+        pert_desc = "No Perturbations"
 
-def resolve_dataset_path(training_config, data_dir="data"):
-    """
-    Resolve the dataset path from the training configuration.
+        # Target variable description - handle signal/noise
+        if "create_signal_noise_target" in config:
+            signal_config = config["create_signal_noise_target"]
+            signal_function = signal_config.get("signal_function", "linear")
+            signal_ratio = signal_config.get("signal_ratio", 0.5)
+            target_desc = f"Target: Signal/Noise Classification ({signal_function}, {signal_ratio:.1%} signal)"
+        else:
+            func_type = config.get("create_target", {}).get("function_type", "N/A")
+            if func_type == "signal_noise":
+                target_desc = "Target: Signal/Noise Classification"
+            else:
+                target_desc = f"Target: {func_type.capitalize()} Relationship"
 
-    """
-    data_source = training_config.get("data_source", {})
-    dataset_config = data_source.get("dataset_config")
-
-    if not dataset_config:
-        raise ValueError("No dataset_config specified in training configuration")
-
-    # Construct path to the generated dataset
-    dataset_filename = f"{dataset_config}_dataset.csv"
-    dataset_path = os.path.join(data_dir, dataset_filename)
-
-    # Verify the file exists
-    if not os.path.exists(dataset_path):
-        raise FileNotFoundError(
-            f"Dataset not found at {dataset_path}. "
-            f"Make sure to run data generation with config '{dataset_config}' first."
+        # Assemble the subtitle
+        subtitle = (
+            f"Dataset: {n_samples:,} Samples, {total_features} Features | "
+            f"{pert_desc} | {target_desc}"
         )
 
-    return dataset_path
+        return main_title, subtitle
+
+    except Exception:
+        # Fallback if the config structure is unexpected
+        return "Feature Distribution", "Configuration details unavailable"
 
 
-def load_yaml_config(config_path):
+def rename_config_file(original_config_path, experiment_name):
     """
-    Load YAML configuration file for training.
+    Rename the configuration file to match the generated dataset name.
     """
-    import yaml
+    config_path = Path(original_config_path)
+    config_dir = config_path.parent
+    config_extension = config_path.suffix
+
+    # Create new filename
+    new_config_name = f"{experiment_name}_config{config_extension}"
+    new_config_path = config_dir / new_config_name
 
     try:
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Training configuration file not found: {config_path}")
-    except yaml.YAMLError as e:
-        raise ValueError(f"Error parsing training configuration YAML: {e}")
+        # Rename the file
+        shutil.move(str(config_path), str(new_config_path))
+        print(f"Configuration file renamed: {config_path.name} → {new_config_name}")
+        return str(new_config_path)
+    except Exception as e:
+        print(f"Warning: Could not rename config file: {e}")
+        return str(config_path)

@@ -4,7 +4,7 @@ global_settings:
 
 # DATA GENERATOR MODULE
 dataset_settings:
-  n_samples: 1000000
+  n_samples: 1000
   n_initial_features: 5
 
 feature_generation:
@@ -25,15 +25,19 @@ feature_generation:
 
 
 
-create_target:
-  features_to_use: ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4"]
-  weights: [3.5, -2.8, 0.1, 5.2, -4.1]
-  noise_level: 0
-  function_type: "linear"
+create_gaussian_signal_noise_target:
+  signal_distribution_params:
+    mean: 2.0      # Signal centered at 2.0
+    std: 0.8       # Signal standard deviation
+  noise_distribution_params:
+    mean: -1.0     # Noise centered at -1.0  
+    std: 1.2       # Noise standard deviation
+  signal_ratio: 0.6  # 60% signal, 40% noise
+  target_feature: "signal_strength"
 
 visualisation:
   features: ["feature_0", "feature_1", "feature_2", "feature_3", "feature_4"]
-  max_features_to_show: 5
+  max_features_to_show: 6
   n_bins: 25
 
   save_to_dir: "reports/figures/"

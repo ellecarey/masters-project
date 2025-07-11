@@ -6,6 +6,8 @@ import os
 import shutil
 from pathlib import Path
 import yaml
+import random
+import numpy as np
 
 
 def find_project_root():
@@ -24,8 +26,8 @@ def find_project_root():
             return str(parent)
 
     # --- FALLBACK ---
-    # last resort if no markers are found
-    # assumes a fixed structure: utils.py -> generator_package -> src -> masters-project
+    # Last resort if no markers are found
+    # Assumes a fixed structure: utils.py -> generator_package -> src -> masters-project
     fallback_path = current_path.parent.parent.parent
     print(
         f"Warning: No project root marker found. Using fallback path: {fallback_path}"
@@ -54,61 +56,31 @@ def get_project_paths():
 
 
 def create_filename_from_config(config: dict) -> str:
-    """
-    Create a unique filename based on configuration parameters including feature type distribution.
-    """
+    """Create unique filename for feature-based classification datasets."""
+
     # Extract dataset settings
     dataset_settings = config.get("dataset_settings", {})
     n_samples = dataset_settings.get("n_samples", 1000)
     n_initial_features = dataset_settings.get("n_initial_features", 5)
 
-    # Extract feature type distribution from feature_generation
+    # Extract feature type distribution
     feature_generation = config.get("feature_generation", {})
     feature_types = feature_generation.get("feature_types", {})
 
-    # Count feature types
     continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
     discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
 
-    # Extract additional features
-    add_features = config.get("add_features", {})
-    n_new_features = add_features.get("n_new_features", 0)
+    # Extract feature-based classification settings
+    feature_config = config["create_feature_based_signal_noise_classification"]
+    signal_ratio = feature_config.get("signal_ratio", 0.5)
 
-    # Count additional feature types if they exist
-    add_continuous = 0
-    add_discrete = 0
-    if n_new_features > 0:
-        add_feature_types = add_features.get("feature_types", {})
-        add_continuous = sum(
-            1 for ft in add_feature_types.values() if ft == "continuous"
-        )
-        add_discrete = sum(1 for ft in add_feature_types.values() if ft == "discrete")
-
-    # Total feature type counts
-    total_continuous = continuous_count + add_continuous
-    total_discrete = discrete_count + add_discrete
-
-    # Extract perturbation settings
-    perturbation = config.get("perturbation", {})
-    perturbation_type = perturbation.get("perturbation_type", "none")
-    perturbation_scale = perturbation.get("scale", 0)
-
-    # Extract target settings
-    target = config.get("create_target", {})
-    function_type = target.get("function_type", "linear")
-    noise_level = target.get("noise_level", 0.1)
-
-    # Create filename components with feature type distribution
     filename_parts = [
         f"n{n_samples}",
         f"f_init{n_initial_features}",
-        f"cont{total_continuous}",
-        f"disc{total_discrete}",
-        f"add{n_new_features}",
-        f"pert-{perturbation_type}",
-        f"scl{str(perturbation_scale).replace('.', 'p')}",
-        f"func-{function_type}",
-        f"noise{str(noise_level).replace('.', 'p')}",
+        f"cont{continuous_count}",
+        f"disc{discrete_count}",
+        "func-feature-based-classification",
+        f"ratio{str(signal_ratio).replace('.', 'p')}",
     ]
 
     return "_".join(filename_parts)
@@ -177,3 +149,12 @@ def rename_config_file(original_config_path, experiment_name):
     except Exception as e:
         print(f"Warning: Could not rename config file: {e}")
         return str(config_path)
+
+
+def set_global_seed(seed: int):
+    """
+    Sets the random seed for Python, NumPy to ensure reproducibility.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    print(f"Global random seed set to {seed}")

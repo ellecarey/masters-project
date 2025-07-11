@@ -20,17 +20,19 @@ class DataGeneratorValidators:
         ValueError
             If parameters are invalid or missing required keys
         """
-        # check input is a dictionary
+        # Check input is a dictionary
         if not isinstance(feature_parameters, dict):
             raise ValueError("Feature parameters must be a dictionary")
 
         for feature_name, params in feature_parameters.items():
             if not isinstance(params, dict):
                 raise ValueError(f"Parameters for {feature_name} must be a dictionary")
+
             if "mean" not in params or "std" not in params:
                 raise ValueError(
                     f"Feature {feature_name} must have 'mean' and 'std' parameters"
                 )
+
             if params["std"] <= 0:
                 raise ValueError(
                     f"Standard deviation for {feature_name} must be positive"
@@ -85,40 +87,26 @@ class DataGeneratorValidators:
                 )
 
     @staticmethod
-    def validate_perturbation_parameters(
-        perturbation_type: str, features: List[str], scale: float, data: pd.DataFrame
+    def validate_signal_noise_parameters(
+        signal_features: List[str],
+        signal_weights: List[float],
+        signal_ratio: float,
+        data: pd.DataFrame,
     ) -> None:
-        """
-        Validate perturbation parameters.
-
-        Parameters:
-        -----------
-        perturbation_type : str
-            Type of perturbation ('gaussian' or 'uniform')
-        features : List[str]
-            List of feature names to perturb
-        scale : float
-            Scale of perturbation
-        data : pd.DataFrame
-            The data containing the features
-
-        Raises:
-        -------
-        ValueError
-            If parameters are invalid
-        """
-        if perturbation_type not in ["gaussian", "uniform"]:
-            raise ValueError("perturbation_type must be 'gaussian' or 'uniform'")
-
-        if scale < 0:
-            raise ValueError("Scale must be non-negative")
+        """Validate signal/noise target parameters."""
 
         if data is None:
             raise ValueError("No data generated. Call generate_features() first.")
 
-        for feature in features:
-            if feature not in data.columns:
-                raise ValueError(f"Feature '{feature}' not found in data")
+        missing_features = [f for f in signal_features if f not in data.columns]
+        if missing_features:
+            raise ValueError(f"Features not found in data: {missing_features}")
+
+        if len(signal_weights) != len(signal_features):
+            raise ValueError("Number of weights must match number of signal features.")
+
+        if not 0 <= signal_ratio <= 1:
+            raise ValueError("signal_ratio must be between 0 and 1.")
 
     @staticmethod
     def validate_target_parameters(
@@ -156,9 +144,10 @@ class DataGeneratorValidators:
         if len(weights) != len(features_to_use):
             raise ValueError("Number of weights must match number of features to use.")
 
-        if function_type not in ["linear", "polynomial", "logistic"]:
+        # Updated to include signal_noise
+        if function_type not in ["linear", "polynomial", "logistic", "signal_noise"]:
             raise ValueError(
-                "function_type must be 'linear', 'polynomial', or 'logistic'"
+                "function_type must be 'linear', 'polynomial', 'logistic', or 'signal_noise'"
             )
 
     @staticmethod
