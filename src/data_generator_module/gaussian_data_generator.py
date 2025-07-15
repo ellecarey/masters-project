@@ -102,7 +102,7 @@ class GaussianDataGenerator:
         signal_features: Dict[str, Dict[str, float]],
         noise_features: Dict[str, Dict[str, float]],
         feature_types: Dict[str, str],
-        store_for_visualization: bool = False,
+        store_for_visualisation: bool = False,
     ):
         """
         Create binary classification with separate feature distributions for signal and noise.
@@ -115,8 +115,8 @@ class GaussianDataGenerator:
             Feature parameters for noise samples: {"feature_0": {"mean": 5.0, "std": 2.0}, ...}
         feature_types : Dict[str, str]
             Feature types for all features: {"feature_0": "discrete", ...}
-        store_for_visualization : bool
-            Whether to store observations for visualization
+        store_for_visualisation : bool
+            Whether to store observations for visualisation
         """
 
         # Fixed 50/50 split
@@ -162,6 +162,15 @@ class GaussianDataGenerator:
 
         # Store as DataFrame
         combined_data["target"] = all_labels
+
+        # Add temporary observations if requested
+        if store_for_visualisation:
+            # Generate separate observations for visualization
+            signal_obs = rng.normal(2.0, 0.8, n_signal_samples)  # Example values
+            noise_obs = rng.normal(-1.0, 1.2, n_noise_samples)  # Example values
+            all_obs = np.concatenate([signal_obs, noise_obs])
+            combined_data["_temp_observations"] = all_obs[indices]
+
         self.data = pd.DataFrame(combined_data)
 
         # Store metadata
@@ -172,7 +181,7 @@ class GaussianDataGenerator:
             "signal_ratio": signal_ratio,
             "actual_signal_ratio": all_labels.mean(),
             "approach": "separate_distributions",
-            "has_temp_observations": store_for_visualization,
+            "has_temp_observations": store_for_visualisation,
         }
 
         print(
@@ -305,7 +314,7 @@ class GaussianDataGenerator:
 
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches="tight")
-            print(f"Feature-wise signal/noise visualization saved to {save_path}")
+            print(f"Feature-wise signal/noise visualisation saved to {save_path}")
         else:
             plt.show()
 

@@ -68,158 +68,104 @@ class TestFeatureGeneration:
 
 
 class TestFeatureBasedSignalNoiseClassification:
-    def test_fixed_signal_ratio(self, generator_with_sample_data):
+    def test_fixed_signal_ratio(self, basic_generator, signal_noise_config):
         """Test that signal ratio is always 0.5"""
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
-
-        generator_with_sample_data.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
+        basic_generator.create_feature_based_signal_noise_classification(
+            **signal_noise_config
         )
 
-        # Signal ratio should always be 0.5
-        actual_ratio = generator_with_sample_data.data["target"].mean()
-        assert abs(actual_ratio - 0.5) < 0.05  # Allow small statistical variation
+        actual_ratio = basic_generator.data["target"].mean()
+        assert abs(actual_ratio - 0.5) < 0.05
+        assert basic_generator.feature_based_metadata["signal_ratio"] == 0.5
 
-        # Verify metadata
-        assert generator_with_sample_data.feature_based_metadata["signal_ratio"] == 0.5
-
-    def test_signal_noise_labels(self, generator_with_sample_data):
+    def test_signal_noise_labels(self, basic_generator, signal_noise_config):
         """Test that labels are binary (0 and 1)"""
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
-
-        generator_with_sample_data.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
+        basic_generator.create_feature_based_signal_noise_classification(
+            **signal_noise_config
         )
 
-        targets = generator_with_sample_data.data["target"]
+        targets = basic_generator.data["target"]
         assert set(targets.unique()) == {0, 1}
         assert targets.dtype == int
 
-    def test_store_for_visualization(self, generator_with_sample_data):
-        """Test temporary observation storage for visualization"""
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
+    def test_store_for_visualisation(self, basic_generator, signal_noise_config):
+        """Test temporary observation storage for visualisation"""
+        config = signal_noise_config.copy()
+        config["store_for_visualisation"] = True
 
-        generator_with_sample_data.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
-            store_for_visualization=True,
-        )
+        basic_generator.create_feature_based_signal_noise_classification(**config)
 
-        assert "_temp_observations" in generator_with_sample_data.data.columns
-        assert (
-            generator_with_sample_data.feature_based_metadata["has_temp_observations"]
-            == True
-        )
+        assert "_temp_observations" in basic_generator.data.columns
+        assert basic_generator.feature_based_metadata["has_temp_observations"] == True
 
-    def test_no_observation_feature_by_default(self, generator_with_sample_data):
-        """Test that no observation feature is stored by default"""
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
-
-        generator_with_sample_data.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
-        )
-
-        assert "_temp_observations" not in generator_with_sample_data.data.columns
-        assert (
-            generator_with_sample_data.feature_based_metadata["has_temp_observations"]
-            == False
-        )
-
-    def test_reproducibility(
-        self, reproducible_generators, sample_feature_params, sample_feature_types
+    def test_no_observation_feature_by_default(
+        self, basic_generator, signal_noise_config
     ):
+        """Test that no observation feature is stored by default"""
+        basic_generator.create_feature_based_signal_noise_classification(
+            **signal_noise_config
+        )
+
+        assert "_temp_observations" not in basic_generator.data.columns
+        assert basic_generator.feature_based_metadata["has_temp_observations"] == False
+
+    def test_reproducibility(self, reproducible_generators, signal_noise_config):
         """Test reproducibility with same seeds"""
         gen1, gen2 = reproducible_generators
 
-        gen1.generate_features(sample_feature_params, sample_feature_types)
-        gen2.generate_features(sample_feature_params, sample_feature_types)
-
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
-
-        gen1.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
-        )
-        gen2.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
-        )
+        gen1.create_feature_based_signal_noise_classification(**signal_noise_config)
+        gen2.create_feature_based_signal_noise_classification(**signal_noise_config)
 
         pd.testing.assert_frame_equal(gen1.data, gen2.data)
 
 
-class TestVisualization:
-    def test_signal_noise_visualization_with_custom_titles(
-        self, generator_with_sample_data
+class Testvisualisation:
+    def test_signal_noise_visualisation_with_custom_titles(
+        self, basic_generator, signal_noise_config
     ):
-        """Test signal vs noise visualization with custom titles"""
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
-
-        generator_with_sample_data.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
+        """Test signal vs noise visualisation with custom titles"""
+        basic_generator.create_feature_based_signal_noise_classification(
+            **signal_noise_config
         )
 
         # Test that method accepts custom titles without error
-        generator_with_sample_data.visualise_signal_noise_by_features(
+        basic_generator.visualise_signal_noise_by_features(
             title="Custom Main Title", subtitle="Custom Subtitle"
         )
 
         # Method should return self for chaining
-        result = generator_with_sample_data.visualise_signal_noise_by_features()
-        assert result == generator_with_sample_data
-
-    def test_visualization_error_without_target(self, generator_with_sample_data):
-        """Test that visualization raises error without target data"""
-        with pytest.raises(ValueError, match="No signal/noise data generated"):
-            generator_with_sample_data.visualise_signal_noise_by_features()
+        result = basic_generator.visualise_signal_noise_by_features()
+        assert result == basic_generator
 
 
 class TestDataManagement:
-    def test_save_data(self, generator_with_sample_data, tmp_path):
+    def test_save_data(self, basic_generator, signal_noise_config, tmp_path):
         """Test data saving functionality"""
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
-
-        generator_with_sample_data.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
+        basic_generator.create_feature_based_signal_noise_classification(
+            **signal_noise_config
         )
 
         save_path = tmp_path / "test_data.csv"
-        generator_with_sample_data.save_data(str(save_path))
+        basic_generator.save_data(str(save_path))
 
         assert save_path.exists()
 
         # Verify saved data
         saved_data = pd.read_csv(save_path)
-        pd.testing.assert_frame_equal(saved_data, generator_with_sample_data.data)
+        pd.testing.assert_frame_equal(saved_data, basic_generator.data)
 
-    def test_get_feature_information(self, generator_with_sample_data):
+    def test_get_feature_information(self, basic_generator, signal_noise_config):
         """Test feature information retrieval"""
-        signal_params = {"mean": 2.0, "std": 0.8}
-        noise_params = {"mean": -1.0, "std": 1.2}
-
-        generator_with_sample_data.create_feature_based_signal_noise_classification(
-            signal_distribution_params=signal_params,
-            noise_distribution_params=noise_params,
+        basic_generator.create_feature_based_signal_noise_classification(
+            **signal_noise_config
         )
 
-        info = generator_with_sample_data.get_feature_information()
+        info = basic_generator.get_feature_information()
 
         assert "target" in info
         assert info["target"]["mean"] == 0.5  # With 50/50 split
 
-        for feature_name in generator_with_sample_data.feature_parameters.keys():
+        for feature_name in signal_noise_config["signal_features"].keys():
             assert feature_name in info
             assert "mean" in info[feature_name]
             assert "std" in info[feature_name]

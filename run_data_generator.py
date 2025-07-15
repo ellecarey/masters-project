@@ -91,8 +91,8 @@ def main():
             signal_features=feature_config["signal_features"],
             noise_features=feature_config["noise_features"],
             feature_types=feature_config["feature_types"],
-            store_for_visualization=feature_config.get(
-                "store_for_visualization", False
+            store_for_visualisation=feature_config.get(
+                "store_for_visualisation", False
             ),
         )
 
@@ -102,7 +102,7 @@ def main():
     dataset_filepath = os.path.join(output_data_dir, f"{experiment_name}_dataset.csv")
     generator.save_data(file_path=dataset_filepath)
 
-    # Step 4: Generate visualizations
+    # Step 4: Generate visualisations
     if "visualisation" in config:
         vis_config = config["visualisation"]
         main_title, subtitle = create_plot_title_from_config(config)
@@ -115,7 +115,7 @@ def main():
                     plot_dir, f"{experiment_name}_feature_wise_signal_noise.pdf"
                 )
 
-                # Pass the custom title and subtitle to the signal/noise visualization
+                # Pass the custom title and subtitle to the signal/noise visualisation
                 generator.visualise_signal_noise_by_features(
                     save_path=feature_wise_plot_path,
                     title=main_title,
