@@ -109,42 +109,20 @@ def main():
         vis_config = config["visualisation"]
         main_title, subtitle = create_plot_title_from_config(config)
 
-        # Create standard feature distribution plots
-        plot_dir = vis_config.get("save_to_dir")
-        if plot_dir:
-            plot_filepath = os.path.join(plot_dir, f"{experiment_name}_plot.pdf")
-
-            # Get features for visualization (no observation feature)
-            if "features" in vis_config:
-                features_to_show = vis_config["features"]
-            else:
-                # Auto-generate features list (no observation feature)
-                feature_generation = config.get("feature_generation", {})
-                base_features = list(
-                    feature_generation.get("feature_parameters", {}).keys()
+        # Only generate signal vs noise feature-wise plots with custom titles
+        if "create_feature_based_signal_noise_classification" in config:
+            plot_dir = vis_config.get("save_to_dir")
+            if plot_dir:
+                feature_wise_plot_path = os.path.join(
+                    plot_dir, f"{experiment_name}_feature_wise_signal_noise.pdf"
                 )
-                features_to_show = base_features
 
-                max_features = vis_config.get(
-                    "max_features_to_show", len(features_to_show)
+                # Pass the custom title and subtitle to the signal/noise visualization
+                generator.visualise_signal_noise_by_features(
+                    save_path=feature_wise_plot_path,
+                    title=main_title,
+                    subtitle=subtitle,
                 )
-                features_to_show = features_to_show[:max_features]
-
-            # Generate feature distribution plots
-            generator.visualise_features(
-                features=features_to_show,
-                max_features_to_show=vis_config["max_features_to_show"],
-                n_bins=vis_config["n_bins"],
-                save_to_path=plot_filepath,
-                title=main_title,
-                subtitle=subtitle,
-            )
-
-    if "create_feature_based_signal_noise_classification" in config:
-        feature_wise_plot_path = os.path.join(
-            "reports/figures/", f"{experiment_name}_feature_wise_signal_noise.pdf"
-        )
-        generator.visualise_signal_noise_by_features(save_path=feature_wise_plot_path)
 
     # Step 5: Configuration management
     if not args.keep_original_name:

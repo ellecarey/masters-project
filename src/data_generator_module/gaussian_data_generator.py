@@ -188,10 +188,24 @@ class GaussianDataGenerator:
 
         return self
 
-    def visualise_signal_noise_by_features(self, save_path: Optional[str] = None):
+    def visualise_signal_noise_by_features(
+        self,
+        save_path: Optional[str] = None,
+        title: Optional[str] = None,
+        subtitle: Optional[str] = None,
+    ):
         """
-        visualise signal vs noise distributions for each individual feature.
+        Visualise signal vs noise distributions for each individual feature.
         Shows overlapping histograms of signal and noise samples for each feature.
+
+        Parameters:
+        -----------
+        save_path : Optional[str]
+            Path to save the plot
+        title : Optional[str]
+            Custom main title for the plot
+        subtitle : Optional[str]
+            Custom subtitle for the plot
         """
         if self.data is None or "target" not in self.data.columns:
             raise ValueError("No signal/noise data generated.")
@@ -223,7 +237,14 @@ class GaussianDataGenerator:
         else:
             axes = axes.flatten()
 
-        # Plot each feature
+        # Add custom titles if provided
+        if title:
+            fig.suptitle(title, fontsize=20, weight="bold")
+
+        if subtitle:
+            plt.figtext(0.5, 0.92, subtitle, ha="center", fontsize=14, style="italic")
+
+        # Plot each feature (rest of the plotting code remains the same)
         for i, feature in enumerate(feature_columns):
             ax = axes[i]
 
@@ -280,11 +301,11 @@ class GaussianDataGenerator:
         for i in range(n_features, len(axes)):
             axes[i].set_visible(False)
 
-        # Overall title and layout
-        fig.suptitle(
-            "Signal vs Noise Distributions by Feature", fontsize=16, weight="bold"
-        )
-        plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+        # Adjust layout to accommodate custom titles
+        if title or subtitle:
+            plt.tight_layout(rect=[0, 0.03, 1, 0.92])
+        else:
+            plt.tight_layout()
 
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches="tight")
