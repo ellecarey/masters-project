@@ -82,17 +82,15 @@ def main():
     # Execute the data generation pipeline
     print("\nStarting feature-based signal vs noise data generation...")
 
-    # Step 1: Generate base features
-    generator.generate_features(**config["feature_generation"])
-
     # Step 2: Create feature-based signal/noise classification target
     if "create_feature_based_signal_noise_classification" in config:
         feature_config = config["create_feature_based_signal_noise_classification"]
 
-        # Remove signal_ratio from the config call since it's now hardcoded
+        # Use the new separate distributions approach
         generator.create_feature_based_signal_noise_classification(
-            signal_distribution_params=feature_config["signal_distribution_params"],
-            noise_distribution_params=feature_config["noise_distribution_params"],
+            signal_features=feature_config["signal_features"],
+            noise_features=feature_config["noise_features"],
+            feature_types=feature_config["feature_types"],
             store_for_visualization=feature_config.get(
                 "store_for_visualization", False
             ),

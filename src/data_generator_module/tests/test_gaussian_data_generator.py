@@ -61,7 +61,7 @@ class TestFeatureGeneration:
 
             # Allow for statistical variation in small samples
             mean_tolerance = 3 * params["std"] / np.sqrt(len(feature_data))
-            std_tolerance = params["std"] / np.sqrt(2 * len(feature_data))
+            std_tolerance = params["std"] / np.sqrt(len(feature_data))
 
             assert abs(feature_data.mean() - params["mean"]) < mean_tolerance
             assert abs(feature_data.std() - params["std"]) < std_tolerance

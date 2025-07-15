@@ -105,9 +105,15 @@ def create_plot_title_from_config(config: dict) -> tuple[str, str]:
         else:
             pert_desc = "No Perturbations"
 
-        # Target variable description
-        func_type = config.get("create_target", {}).get("function_type", "N/A")
-        target_desc = f"Target: {func_type.capitalize()} Relationship"
+        # Target variable description - ADD THIS CHECK
+        if "create_feature_based_signal_noise_classification" in config:
+            target_desc = "Target: Feature-based Classification"
+        else:
+            func_type = config.get("create_target", {}).get("function_type", "N/A")
+            if func_type == "signal_noise":
+                target_desc = "Target: Signal/Noise Classification"
+            else:
+                target_desc = f"Target: {func_type.capitalize()} Relationship"
 
         # Assemble the subtitle
         subtitle = (

@@ -1,0 +1,35 @@
+# GLOBAL
+global_settings:
+  random_seed: 42
+
+# Dataset settings
+dataset_settings:
+  n_samples: 100000
+  n_initial_features: 5
+
+# Feature-based signal vs noise classification with separate distributions
+create_feature_based_signal_noise_classification:
+  signal_features:
+    feature_0: {mean: 15.0, std: 1.0}  # Signal-specific distribution
+    feature_1: {mean: -2.0, std: 0.5}
+    feature_2: {mean: 8.0, std: 1.2}
+    feature_3: {mean: 0.0, std: 2.0}
+    feature_4: {mean: -10.0, std: 1.5}
+  noise_features:
+    feature_0: {mean: 5.0, std: 2.0}   # Noise-specific distribution
+    feature_1: {mean: 8.0, std: 1.8}
+    feature_2: {mean: -5.0, std: 0.8}
+    feature_3: {mean: 12.0, std: 1.0}
+    feature_4: {mean: 3.0, std: 2.5}
+  feature_types:
+    feature_0: "discrete"
+    feature_1: "discrete"
+    feature_2: "discrete"
+    feature_3: "discrete"
+    feature_4: "discrete"
+
+# Visualisation settings
+visualisation:
+  max_features_to_show: 5
+  n_bins: 25
+  save_to_dir: "reports/figures/"

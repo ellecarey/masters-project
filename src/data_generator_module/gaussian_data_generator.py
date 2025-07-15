@@ -99,92 +99,88 @@ class GaussianDataGenerator:
 
     def create_feature_based_signal_noise_classification(
         self,
-        signal_distribution_params: Dict[str, float],
-        noise_distribution_params: Dict[str, float],
+        signal_features: Dict[str, Dict[str, float]],
+        noise_features: Dict[str, Dict[str, float]],
+        feature_types: Dict[str, str],
         store_for_visualization: bool = False,
     ):
         """
-        Create binary classification where labels are assigned based on originating
-        Gaussian distribution, but observation values are NOT stored as a feature.
+        Create binary classification with separate feature distributions for signal and noise.
 
         Parameters:
         -----------
-        signal_distribution_params : Dict[str, float]
-            Parameters for signal Gaussian: {"mean": float, "std": float}
-        noise_distribution_params : Dict[str, float]
-            Parameters for noise Gaussian: {"mean": float, "std": float}
-        signal_ratio : float
-            Proportion of samples that should be signal class
+        signal_features : Dict[str, Dict[str, float]]
+            Feature parameters for signal samples: {"feature_0": {"mean": 15.0, "std": 1.0}, ...}
+        noise_features : Dict[str, Dict[str, float]]
+            Feature parameters for noise samples: {"feature_0": {"mean": 5.0, "std": 2.0}, ...}
+        feature_types : Dict[str, str]
+            Feature types for all features: {"feature_0": "discrete", ...}
         store_for_visualization : bool
-            Whether to temporarily store Gaussian observations for visualization
-
-        Returns:
-        --------
-        self : GaussianDataGenerator
-            Returns self for method chaining
+            Whether to store observations for visualization
         """
 
-        if self.data is None:
-            raise ValueError("No data generated. Call generate_features() first.")
-
+        # Fixed 50/50 split
         signal_ratio = 0.5
-        if not 0 <= signal_ratio <= 1:
-            raise ValueError("signal_ratio must be between 0 and 1.")
-
         n_signal_samples = int(self.n_samples * signal_ratio)
         n_noise_samples = self.n_samples - n_signal_samples
 
         rng = np.random.RandomState(self.random_state)
 
-        # Generate signal and noise observations (internal use only)
-        signal_observations = rng.normal(
-            signal_distribution_params["mean"],
-            signal_distribution_params["std"],
-            n_signal_samples,
-        )
+        # Generate signal features
+        signal_data = {}
+        for feature_name, params in signal_features.items():
+            feature_data = rng.normal(params["mean"], params["std"], n_signal_samples)
+            if feature_types.get(feature_name, "continuous") == "discrete":
+                feature_data = np.round(feature_data)
+            signal_data[feature_name] = feature_data
 
-        noise_observations = rng.normal(
-            noise_distribution_params["mean"],
-            noise_distribution_params["std"],
-            n_noise_samples,
-        )
+        # Generate noise features
+        noise_data = {}
+        for feature_name, params in noise_features.items():
+            feature_data = rng.normal(params["mean"], params["std"], n_noise_samples)
+            if feature_types.get(feature_name, "continuous") == "discrete":
+                feature_data = np.round(feature_data)
+            noise_data[feature_name] = feature_data
 
-        # Create labels based purely on originating distribution
-        signal_labels = np.ones(n_signal_samples, dtype=int)  # Signal = 1
-        noise_labels = np.zeros(n_noise_samples, dtype=int)  # Noise = 0
+        # Combine all features
+        combined_data = {}
+        for feature_name in signal_features.keys():
+            combined_data[feature_name] = np.concatenate(
+                [signal_data[feature_name], noise_data[feature_name]]
+            )
 
-        # Combine labels only (observations are discarded by default)
+        # Create labels
+        signal_labels = np.ones(n_signal_samples, dtype=int)
+        noise_labels = np.zeros(n_noise_samples, dtype=int)
         all_labels = np.concatenate([signal_labels, noise_labels])
 
-        # Shuffle to randomize order
+        # Shuffle everything together
         indices = rng.permutation(self.n_samples)
+        for feature_name in combined_data:
+            combined_data[feature_name] = combined_data[feature_name][indices]
         all_labels = all_labels[indices]
 
-        # Store ONLY the binary target - no observation feature by default
-        self.data["target"] = all_labels
+        # Store as DataFrame
+        combined_data["target"] = all_labels
+        self.data = pd.DataFrame(combined_data)
 
-        # Optionally store observations for visualization
-        if store_for_visualization:
-            all_observations = np.concatenate([signal_observations, noise_observations])
-            all_observations = all_observations[indices]
-            self.data["_temp_observations"] = all_observations
-
-        # Store metadata for analysis
+        # Store metadata
         self.feature_based_metadata = {
-            "signal_distribution": signal_distribution_params,
-            "noise_distribution": noise_distribution_params,
+            "signal_features": signal_features,
+            "noise_features": noise_features,
+            "feature_types": feature_types,
             "signal_ratio": signal_ratio,
             "actual_signal_ratio": all_labels.mean(),
-            "approach": "feature_based_learning",
+            "approach": "separate_distributions",
             "has_temp_observations": store_for_visualization,
         }
 
-        print("Created feature-based signal/noise classification:")
-        print(f"  Signal samples: {(all_labels == 1).sum()} (target = 1)")
-        print(f"  Noise samples: {(all_labels == 0).sum()} (target = 0)")
-
-        if store_for_visualization:
-            print("  Temporary observations stored for visualization")
+        print(
+            "Created feature-based signal/noise classification with separate distributions:"
+        )
+        print(f" Signal samples: {(all_labels == 1).sum()} (target = 1)")
+        print(f" Noise samples: {(all_labels == 0).sum()} (target = 0)")
+        print(" Features have different distributions for signal vs noise samples")
 
         return self
 
