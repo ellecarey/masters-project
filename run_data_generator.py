@@ -88,13 +88,15 @@ def main():
     # Step 2: Create feature-based signal/noise classification target
     if "create_feature_based_signal_noise_classification" in config:
         feature_config = config["create_feature_based_signal_noise_classification"]
-        generator.create_feature_based_signal_noise_classification(**feature_config)
-    else:
-        raise ValueError(
-            "Configuration must include 'create_feature_based_signal_noise_classification' section"
-        )
 
-    print("Pipeline finished generating data.")
+        # Remove signal_ratio from the config call since it's now hardcoded
+        generator.create_feature_based_signal_noise_classification(
+            signal_distribution_params=feature_config["signal_distribution_params"],
+            noise_distribution_params=feature_config["noise_distribution_params"],
+            store_for_visualization=feature_config.get(
+                "store_for_visualization", False
+            ),
+        )
 
     # Step 3: Save the generated dataset
     output_settings = config.get("output_settings", {"data_dir": "data/"})

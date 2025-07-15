@@ -90,7 +90,6 @@ class DataGeneratorValidators:
     def validate_signal_noise_parameters(
         signal_features: List[str],
         signal_weights: List[float],
-        signal_ratio: float,
         data: pd.DataFrame,
     ) -> None:
         """Validate signal/noise target parameters."""
@@ -104,9 +103,6 @@ class DataGeneratorValidators:
 
         if len(signal_weights) != len(signal_features):
             raise ValueError("Number of weights must match number of signal features.")
-
-        if not 0 <= signal_ratio <= 1:
-            raise ValueError("signal_ratio must be between 0 and 1.")
 
     @staticmethod
     def validate_target_parameters(

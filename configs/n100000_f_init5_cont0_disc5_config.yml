@@ -30,7 +30,6 @@ create_feature_based_signal_noise_classification:
   noise_distribution_params:
     mean: -1.0     # Noise population mean
     std: 1.2       # Noise population standard deviation
-  signal_ratio: 0.5  # 50% signal, 50% noise
 
 # Visualisation settings 
 visualisation:

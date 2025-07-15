@@ -57,7 +57,6 @@ def get_project_paths():
 
 def create_filename_from_config(config: dict) -> str:
     """Create unique filename for feature-based classification datasets."""
-
     # Extract dataset settings
     dataset_settings = config.get("dataset_settings", {})
     n_samples = dataset_settings.get("n_samples", 1000)
@@ -66,21 +65,15 @@ def create_filename_from_config(config: dict) -> str:
     # Extract feature type distribution
     feature_generation = config.get("feature_generation", {})
     feature_types = feature_generation.get("feature_types", {})
-
     continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
     discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
 
-    # Extract feature-based classification settings
-    feature_config = config["create_feature_based_signal_noise_classification"]
-    signal_ratio = feature_config.get("signal_ratio", 0.5)
-
+    # Simplified filename parts - removed fixed identifier and signal ratio
     filename_parts = [
         f"n{n_samples}",
         f"f_init{n_initial_features}",
         f"cont{continuous_count}",
         f"disc{discrete_count}",
-        "func-feature-based-classification",
-        f"ratio{str(signal_ratio).replace('.', 'p')}",
     ]
 
     return "_".join(filename_parts)
