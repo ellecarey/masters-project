@@ -105,48 +105,6 @@ class DataGeneratorValidators:
             raise ValueError("Number of weights must match number of signal features.")
 
     @staticmethod
-    def validate_target_parameters(
-        features_to_use: List[str],
-        weights: List[float],
-        function_type: str,
-        data: pd.DataFrame,
-    ) -> None:
-        """
-        Validate target variable creation parameters.
-
-        Parameters:
-        -----------
-        features_to_use : List[str]
-            List of feature names to use for target creation
-        weights : List[float]
-            Weights for each feature
-        function_type : str
-            Type of function to use
-        data : pd.DataFrame
-            The data containing the features
-
-        Raises:
-        -------
-        ValueError
-            If parameters are invalid
-        """
-        if data is None:
-            raise ValueError("No data generated. Call generate_features() first.")
-
-        missing_features = [f for f in features_to_use if f not in data.columns]
-        if missing_features:
-            raise ValueError(f"Features not found in data: {missing_features}")
-
-        if len(weights) != len(features_to_use):
-            raise ValueError("Number of weights must match number of features to use.")
-
-        # Updated to include signal_noise
-        if function_type not in ["linear", "polynomial", "logistic", "signal_noise"]:
-            raise ValueError(
-                "function_type must be 'linear', 'polynomial', 'logistic', or 'signal_noise'"
-            )
-
-    @staticmethod
     def validate_visualisation_parameters(
         features: List[str], max_features_to_show: int, n_bins: int, data: pd.DataFrame
     ) -> None:

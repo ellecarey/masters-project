@@ -1,95 +1,79 @@
 """
-Sample data and constants for testing the GaussianDataGenerator.
+Updated sample data for feature-based signal vs noise classification testing.
 """
 
+"""
+Updated sample data for feature-based signal vs noise classification testing.
+"""
+
+# Feature parameters for testing
 SAMPLE_FEATURE_PARAMS = {
-    "test_feature_1": {"mean": 0, "std": 1},
-    "test_feature_2": {"mean": 10, "std": 3},
-    "test_feature_3": {"mean": -5, "std": 0.5},
+    "feature_0": {"mean": 0.0, "std": 1.0},
+    "feature_1": {"mean": 10.0, "std": 2.0},
+    "feature_2": {"mean": -5.0, "std": 1.5},
 }
 
+# Extreme feature parameters for edge case testing
 EXTREME_FEATURE_PARAMS = {
-    "high_precision_feature": {"mean": 0.123456789, "std": 0.987654321},
-    "large_scale_feature": {"mean": 1e6, "std": 1e3},
-    "negative_large_feature": {"mean": -1e6, "std": 1e-3},
+    "feature_0": {"mean": 1000.0, "std": 500.0},
+    "feature_1": {"mean": -1000.0, "std": 0.001},
+    "feature_2": {"mean": 0.0, "std": 1000.0},
 }
 
+# Invalid feature parameters for error testing
 INVALID_FEATURE_PARAMS = {
-    "negative_std": {"mean": 0, "std": -1},
-    "zero_std": {"mean": 0, "std": 0},
-    "missing_mean": {"std": 1},
-    "missing_std": {"mean": 0},
-    "wrong_type": "not_a_dict",
-    "extra_keys": {"mean": 0, "std": 1, "extra": "value"},
+    "missing_std": {"mean": 0.0},
+    "negative_std": {"mean": 0.0, "std": -1.0},
+    "zero_std": {"mean": 0.0, "std": 0.0},
+    "non_numeric_mean": {"mean": "invalid", "std": 1.0},
+    "non_numeric_std": {"mean": 0.0, "std": "invalid"},
 }
 
-# Feature type constants
+# Feature types for testing
 SAMPLE_FEATURE_TYPES = {
-    "test_feature_1": "continuous",
-    "test_feature_2": "discrete",
-    "test_feature_3": "continuous",
+    "feature_0": "continuous",
+    "feature_1": "discrete",
+    "feature_2": "continuous",
 }
 
+# Invalid feature types for error testing
 INVALID_FEATURE_TYPES = {
-    "invalid_categorical": "categorical",
-    "invalid_numeric": 123,
-    "invalid_none": None,
-    "invalid_string": "invalid_type",
+    "feature_0": "invalid_type",
+    "feature_1": "categorical",
+    "feature_2": 123,
 }
 
-# Dataset size configurations for different test scenarios
-DATASET_CONFIGS = {
-    "minimal_valid_input": {"samples": 1, "features": 1},
-    "unit_test_standard": {"samples": 50, "features": 3},
-    "integration_test_size": {"samples": 500, "features": 10},
-    "performance_benchmark": {"samples": 5000, "features": 50},
-    "stress_test_maximum": {"samples": 50000, "features": 100},
+# Target weights for testing
+TARGET_WEIGHTS = {
+    "balanced": [0.5, -0.5, 0.3],
+    "positive": [0.8, 0.2, 0.5],
+    "negative": [-0.3, -0.7, -0.1],
+    "mixed": [1.0, -1.0, 0.5, -0.2],
 }
 
-# Perturbation scale constants with descriptive names
+# Feature noise levels for testing
 FEATURE_NOISE_LEVELS = {
-    "no_noise": 0.0,
-    "low_noise": 0.01,
-    "medium_noise": 0.1,
-    "high_noise": 0.3,
-    "extreme_noise": 1.0,
+    "low": 0.1,
+    "medium": 0.5,
+    "high": 1.0,
 }
 
-# Weight configurations for target variable creation
-TARGET_WEIGHTS = [1.0, -0.5, 0.3, 2.5, -1.8, 0.7, -0.2, 1.1]
-
-# Function types for target creation
+# Function types for testing
 FUNCTION_TYPES = ["linear", "polynomial", "logistic"]
 
-# Noise levels for target creation with explicit values
-
+# Target noise levels for testing
 TARGET_NOISE_LEVELS = {
-    "no_noise": 0.0,
-    "low_noise": 0.01,
-    "medium_noise": 0.1,
-    "high_noise": 0.3,
-    "extreme_noise": 1.0,
+    "none": 0.0,
+    "low": 0.1,
+    "medium": 0.3,
+    "high": 0.5,
 }
 
-# Random states for reproducibility testing
-REPRODUCIBILITY_SEEDS = [42, 123, 999, 2023, 12345]
+# Signal/noise parameters for testing
+SIGNAL_DISTRIBUTION_PARAMS = {"mean": 2.0, "std": 0.8}
+NOISE_DISTRIBUTION_PARAMS = {"mean": -1.0, "std": 1.2}
 
-# Expected value ranges for validation
-VALIDATION_RANGES = {
-    "default_mean_range": (-5, 5),
-    "default_std_range": (0.5, 3),
-    "probability_range": (0, 1),
-    "binary_values": {0, 1},
-}
-
-
-EDGE_CASE_LIMITS = {
-    "minimum_samples": 1,
-    "minimum_features": 1,
-    "maximum_reasonable_samples": 100000,
-    "maximum_reasonable_features": 1000,
-}
-
+# Error patterns for validation testing
 ERROR_PATTERNS = {
     "negative_samples": r"Number of samples must be positive",
     "negative_features": r"Number of features must be positive",
@@ -98,20 +82,26 @@ ERROR_PATTERNS = {
     "invalid_feature_type": r"Invalid feature type",
     "no_data": r"No data generated. Call generate_features\(\) first.",
     "feature_not_found": r"Feature .* not found in data",
-    "weight_mismatch": r"Number of weights must match number of features",
-    "invalid_function_type": r"function_type must be",
 }
 
-# # Performance benchmarks
-# PERFORMANCE_THRESHOLDS = {
-#     'unit_test_timeout_seconds': 1.0,
-#     'integration_test_timeout_seconds': 5.0,
-#     'performance_test_timeout_seconds': 30.0,
-# }
+# Dataset configurations for different test scenarios
+DATASET_CONFIGS = {
+    "minimal": {"samples": 10, "features": 2},
+    "small": {"samples": 50, "features": 3},
+    "medium": {"samples": 100, "features": 5},
+    "large": {"samples": 1000, "features": 10},
+}
 
-# # Statistical validation thresholds
-# STATISTICAL_TOLERANCES = {
-#     'correlation_threshold': 0.95,  # For reproducibility tests
-#     'mean_std_tolerance': 0.1,     # For mean/std validation
-#     'probability_tolerance': 0.05   # For probability-based tests
-# }
+# Reproducibility seeds for testing
+REPRODUCIBILITY_SEEDS = {
+    "default": 42,
+    "alternative": 123,
+    "third": 456,
+}
+
+# Validation ranges for testing
+VALIDATION_RANGES = {
+    "samples": {"min": 1, "max": 100000},
+    "features": {"min": 1, "max": 1000},
+    "std": {"min": 0.001, "max": 1000.0},
+}

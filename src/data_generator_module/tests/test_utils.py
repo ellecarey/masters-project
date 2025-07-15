@@ -1,47 +1,84 @@
+"""
+Tests for utility functions - Updated for simplified naming.
+"""
+
+import pytest
 from data_generator_module.utils import (
     create_filename_from_config,
     create_plot_title_from_config,
 )
 
 
-def test_create_filename_from_config(sample_config):
-    """Tests that the filename is generated correctly from a standard config."""
-    expected_name = "n1000_f_init5_add2_pert-gaussian_scl0p15_func-polynomial"
-    filename = create_filename_from_config(sample_config)
-    assert filename == expected_name
+class TestFilenameGeneration:
+    def test_create_filename_basic(self):
+        """Test basic filename generation"""
+        config = {
+            "dataset_settings": {"n_samples": 100000, "n_initial_features": 5},
+            "feature_generation": {
+                "feature_types": {
+                    "feature_0": "discrete",
+                    "feature_1": "discrete",
+                    "feature_2": "discrete",
+                    "feature_3": "discrete",
+                    "feature_4": "discrete",
+                }
+            },
+        }
+
+        expected = "n100000_f_init5_cont0_disc5"
+        result = create_filename_from_config(config)
+        assert result == expected
+
+    def test_create_filename_mixed_types(self):
+        """Test filename generation with mixed feature types"""
+        config = {
+            "dataset_settings": {"n_samples": 50000, "n_initial_features": 4},
+            "feature_generation": {
+                "feature_types": {
+                    "feature_0": "continuous",
+                    "feature_1": "continuous",
+                    "feature_2": "discrete",
+                    "feature_3": "discrete",
+                }
+            },
+        }
+
+        expected = "n50000_f_init4_cont2_disc2"
+        result = create_filename_from_config(config)
+        assert result == expected
+
+    def test_create_filename_missing_keys(self):
+        """Test filename generation with missing keys uses defaults"""
+        config = {"dataset_settings": {"n_samples": 1000}}
+
+        expected = "n1000_f_init5_cont0_disc0"
+        result = create_filename_from_config(config)
+        assert result == expected
 
 
-def test_create_plot_title_from_config(sample_config):
-    """Tests that the plot title and subtitle are generated correctly."""
-    expected_title = "Distribution of Generated Features"
-    expected_subtitle = (
-        "Dataset: 1000 Samples, 7 Features | "
-        "Perturbation: Gaussian (Scale: 0.15) | "
-        "Target: Polynomial Relationship"
-    )
+class TestPlotTitleGeneration:
+    def test_create_plot_title_basic(self):
+        """Test basic plot title generation"""
+        config = {
+            "dataset_settings": {"n_samples": 100000, "n_initial_features": 5},
+            "create_feature_based_signal_noise_classification": {
+                "signal_distribution_params": {"mean": 2.0, "std": 0.8},
+                "noise_distribution_params": {"mean": -1.0, "std": 1.2},
+            },
+        }
 
-    title, subtitle = create_plot_title_from_config(sample_config)
+        title, subtitle = create_plot_title_from_config(config)
 
-    assert title == expected_title
-    assert subtitle == expected_subtitle
+        assert title == "Distribution of Generated Features"
+        assert "100,000 Samples" in subtitle
+        assert "5 Features" in subtitle
+        assert "Feature-based Classification" in subtitle
 
+    def test_create_plot_title_fallback(self):
+        """Test plot title generation fallback"""
+        config = {}  # Empty config
 
-def test_naming_handles_missing_keys():
-    """Tests that the utility functions are robust to missing config keys."""
-    minimal_config = {
-        "dataset_settings": {"n_samples": 500, "n_initial_features": 3},
-        "create_target": {"function_type": "linear"},
-    }
+        title, subtitle = create_plot_title_from_config(config)
 
-    # Test filename fallback logic
-    expected_filename = "n500_f_init3_add0_pert-none_scl0_func-linear"
-    assert create_filename_from_config(minimal_config) == expected_filename
-
-    # Test title fallback logic
-    expected_subtitle = (
-        "Dataset: 500 Samples, 3 Features | "
-        "No Perturbations | "
-        "Target: Linear Relationship"
-    )
-    _, subtitle = create_plot_title_from_config(minimal_config)
-    assert subtitle == expected_subtitle
+        assert title == "Feature Distribution"
+        assert subtitle == "Configuration details unavailable"
