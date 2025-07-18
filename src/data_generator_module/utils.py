@@ -62,11 +62,29 @@ def create_filename_from_config(config: dict) -> str:
     n_samples = dataset_settings.get("n_samples", 1000)
     n_initial_features = dataset_settings.get("n_initial_features", 5)
 
-    # Extract feature type distribution
-    feature_generation = config.get("feature_generation", {})
-    feature_types = feature_generation.get("feature_types", {})
+    # Extract feature type distribution from the correct location
+    classification_config = config.get(
+        "create_feature_based_signal_noise_classification", {}
+    )
+    feature_types = classification_config.get("feature_types", {})
     continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
     discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
+
+    # Calculate average separation
+    signal_features = classification_config.get("signal_features", {})
+    noise_features = classification_config.get("noise_features", {})
+
+    separations = []
+    if signal_features and noise_features:
+        for feature_name in signal_features.keys():
+            if feature_name in noise_features:
+                signal_mean = signal_features[feature_name].get("mean", 0)
+                noise_mean = noise_features[feature_name].get("mean", 0)
+                separations.append(abs(signal_mean - noise_mean))
+
+    avg_separation = sum(separations) / len(separations) if separations else 0.0
+    # Format separation for filename, replacing '.' with 'p'
+    sep_str = f"sep{str(round(avg_separation, 1)).replace('.', 'p')}"
 
     # Simplified filename parts - removed fixed identifier and signal ratio
     filename_parts = [
@@ -74,6 +92,7 @@ def create_filename_from_config(config: dict) -> str:
         f"f_init{n_initial_features}",
         f"cont{continuous_count}",
         f"disc{discrete_count}",
+        sep_str,
     ]
 
     return "_".join(filename_parts)
