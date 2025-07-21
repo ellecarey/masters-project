@@ -4,7 +4,7 @@ global_settings:
 
 # Dataset settings
 dataset_settings:
-  n_samples: 1000000
+  n_samples: 1000
   n_initial_features: 5
 
 # Feature-based signal vs noise classification

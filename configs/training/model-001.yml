@@ -1,4 +1,4 @@
-# TRAINING
+# configs/training/model-001.yml
 training_settings:
   output_data_dir: "data/"
   target_column: "target"
