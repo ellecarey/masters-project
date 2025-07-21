@@ -258,7 +258,7 @@ class GaussianDataGenerator:
                 noise_data[feature],
                 bins=30,
                 alpha=0.7,
-                label=f"Noise (n={len(noise_data)})",
+                label="Noise",
                 color="red",
                 density=True,
                 edgecolor="black",
@@ -269,7 +269,7 @@ class GaussianDataGenerator:
                 signal_data[feature],
                 bins=30,
                 alpha=0.7,
-                label=f"Signal (n={len(signal_data)})",
+                label="Signal",
                 color="blue",
                 density=True,
                 edgecolor="black",
@@ -280,7 +280,7 @@ class GaussianDataGenerator:
             ax.set_title(f"Distribution of {feature}")
             ax.set_xlabel("Value")
             ax.set_ylabel("Density")
-            ax.legend()
+            ax.legend(loc="upper right")
             ax.grid(True, alpha=0.3)
 
             # Add statistics text box
