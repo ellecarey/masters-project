@@ -21,6 +21,9 @@ def main():
     Runs the training pipeline using separate configuration files for
     data generation and training hyperparameters.
     """
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+
     parser = argparse.ArgumentParser(description="Run the training pipeline.")
     parser.add_argument(
         "--data-config",
@@ -144,6 +147,7 @@ def main():
         criterion=criterion,
         optimiser=optimiser,
         epochs=hyperparams["epochs"],
+        device=device,
     )
 
     # Final evaluation on the held-out test set
@@ -155,6 +159,7 @@ def main():
 
     with torch.no_grad():
         for features, labels in test_loader:
+            features, labels = features.to(device), labels.to(device)
             outputs = trained_model(features)
             loss = criterion(outputs, labels)
             test_loss += loss.item()
