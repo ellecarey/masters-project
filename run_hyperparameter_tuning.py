@@ -1,5 +1,6 @@
 import os
 import argparse
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import torch
@@ -114,25 +115,6 @@ def objective(trial, data_config_path, tuning_config):
     auc = roc_auc_score(all_labels, all_scores)
     return auc
 
-
-    # # --- Evaluate on Validation Set and Return the Metric to Optimize ---
-    # trained_model.eval()
-    # all_preds = []
-    # all_labels = []
-    # with torch.no_grad():
-    #     for features, labels in val_loader:
-    #         # Move the validation batch to the correct device
-    #         features = features.to(device)
-    
-    #         outputs = trained_model(features)
-    #         preds = torch.round(torch.sigmoid(outputs))
-    #         all_preds.extend(preds.cpu().numpy())
-    #         all_labels.extend(labels.cpu().numpy())
-
-    # # maximize the F1-score
-    # f1 = f1_score(all_labels, all_preds)
-    # return f1
-
 def plot_final_metrics(model, test_loader, device, experiment_name):
     """
     Evaluates the final model on the test set and plots the confusion matrix
@@ -215,6 +197,35 @@ def plot_training_history(history, experiment_name):
     plt.close()
     print(f"Saved training history plot to: {save_path}")
 
+def create_and_save_optimal_config(best_params, final_data_config_path, base_training_config_path):
+    """
+    Creates a new training config file populated with the best hyperparameters.
+    """
+    # Load the base training config to use as a template
+    with open(base_training_config_path, 'r') as f:
+        config_template = yaml.safe_load(f)
+
+    # Update the hyperparameters with the best ones found by Optuna
+    config_template['training_settings']['hyperparameters'] = best_params
+
+    # Generate a descriptive name for the new config file
+    final_data_config = data_utils.load_yaml_config(final_data_config_path)
+    dataset_base_name = data_utils.create_filename_from_config(final_data_config)
+    training_suffix = Path(base_training_config_path).stem
+    new_config_filename = f"{dataset_base_name}_{training_suffix}_optimal.yml"
+
+    # Define the save path
+    save_dir = "configs/training/generated"
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, new_config_filename)
+
+    # Save the new configuration file
+    with open(save_path, 'w') as f:
+        yaml.dump(config_template, f, default_flow_style=False, sort_keys=False)
+
+    print(f"\nOptimal training configuration saved to: {save_path}")
+    return save_path
+
 # --- 2. The Main Tuning Pipeline ---
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -232,6 +243,18 @@ def main():
         help="Path to the tuning config file defining the hyperparameter search space.",
     )
     parser.add_argument(
+        "--base-training-config",
+        "-btc",
+        required=True,
+        help="Path to the base training config file to use as a template (e.g., model-001.yml).",
+    )
+    parser.add_argument(
+        "--final-data-config",
+        "-fdc",
+        required=True,
+        help="Path to the data config for the final large-scale training run.",
+    )
+    parser.add_argument(
         "--n-trials", type=int, default=50, help="Number of tuning trials to run."
     )
     args = parser.parse_args()
@@ -241,11 +264,9 @@ def main():
         tuning_config = yaml.safe_load(f)
 
     # --- Create an Optuna Study ---
-    # specify 'maximize' - highest F1-score.
     study = optuna.create_study(direction="maximize")
 
     # --- Run the Optimization ---
-    # pass the objective function and other fixed arguments using a lambda function.
     study.optimize(
         lambda trial: objective(trial, args.data_config, tuning_config),
         n_trials=args.n_trials,
@@ -263,62 +284,26 @@ def main():
     for key, value in best_trial.params.items():
         print(f"  {key}: {value}")
 
-    print("\n--- Training Final Model with Best Hyperparameters ---")
-    
-    data_config = data_utils.load_yaml_config(args.data_config)
-    global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
-    
-    # 1. Load data and create splits
-    dataset_base_name = data_utils.create_filename_from_config(data_config)
-    dataset_filepath = os.path.join("data", f"{dataset_base_name}_dataset.csv")
-    data = pd.read_csv(dataset_filepath)
+    # --- FINAL CONFIGURATION GENERATION ---
+    print("\n--- Generating Final Configuration File ---")
 
-    X = data.drop(columns=["target"])
-    y = data["target"]
-    
-    # Create the same splits as run_training.py to get the test set
-    X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=global_seed, stratify=y
-    )
-
-    train_val_dataset = TabularDataset(X_train_val, y_train_val)
-    test_dataset = TabularDataset(X_test, y_test)
-    
+    # Get the best parameters and ensure output_size is included
     best_params = best_trial.params
-    train_val_loader = DataLoader(
-        dataset=train_val_dataset, batch_size=best_params["batch_size"], shuffle=True
-    )
-    test_loader = DataLoader(
-        dataset=test_dataset, batch_size=best_params["batch_size"], shuffle=False
+    best_params['output_size'] = 1
+
+    # Create and save the new config file for the large dataset
+    optimal_config_path = create_and_save_optimal_config(
+        best_params=best_params,
+        final_data_config_path=args.final_data_config,
+        base_training_config_path=args.base_training_config
     )
 
-    # 2. Re-initialize and train the final model
-    data_utils.set_global_seed(global_seed)
-    final_model = MLP(
-        input_size=X.shape[1],
-        hidden_size=best_params["hidden_size"],
-        output_size=1
-    )
-    criterion = nn.BCEWithLogitsLoss()
-    optimiser = torch.optim.Adam(final_model.parameters(), lr=best_params["learning_rate"])
-
-    # Train on the combined training and validation data and capture metrics
-    trained_final_model, history = train_model(
-        final_model,
-        train_val_loader,
-        train_val_loader, # Using the same loader for val is fine for this final training
-        criterion,
-        optimiser,
-        best_params["epochs"],
-        device=device,
-    )
-
-    # 3. Generate and save plots for the held-out test set
-    experiment_name = f"{dataset_base_name}_tuning_best"
-    plot_final_metrics(trained_final_model, test_loader, device, experiment_name)
-    
-    # 4. Generate and save the new training history plot
-    plot_training_history(history, experiment_name)
+    # --- Print Next Steps ---
+    print("\n--- Next Step: Final Training ---")
+    print("To train your final model on the large dataset, run the following command:")
+    print("\n" + "=" * 80)
+    print(f"uv run run_training.py -dc {args.final_data_config} -tc {optimal_config_path}")
+    print("=" * 80 + "\n")
 
 if __name__ == "__main__":
     main()

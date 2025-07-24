@@ -15,5 +15,5 @@ search_space:
   epochs:
     type: int
     low: 10
-    high: 30
+    high: 50
     step: 5
