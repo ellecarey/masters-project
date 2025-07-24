@@ -1,61 +1,38 @@
 import matplotlib.pyplot as plt
 import warnings
 
-
-def apply_custom_plot_style(use_latex: bool = True):
+def apply_custom_plot_style():
     """
-    Applies a consistent, publication-quality style to Matplotlib plots.
-    Includes settings for LaTeX rendering if available and requested.
-
-    Parameters:
-    -----------
-    use_latex (bool): Attempt to use LaTeX for text rendering. Defaults to True.
+    Applies a consistent, publication-quality style to Matplotlib plots
+    using a reliable, non-LaTeX text rendering engine.
     """
-
+    # Reset to defaults to avoid style conflicts
     plt.rcParams.update(plt.rcParamsDefault)
 
-    can_use_latex = False
-    if use_latex:
-        try:
-            from matplotlib.texmanager import TexManager
+    # --- Font and Text Settings (No LaTeX) ---
+    # Explicitly disable TeX rendering
+    plt.rcParams["text.usetex"] = False
+    # Use a clean, professional sans-serif font available by default
+    plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams["font.sans-serif"] = [
+        "DejaVu Sans",
+        "Bitstream Vera Sans",
+        "Computer Modern Sans Serif",
+        "Lucida Grande",
+        "Verdana",
+        "Geneva",
+        "Lucid",
+        "Arial",
+        "Helvetica",
+        "Avant Garde",
+        "sans-serif",
+    ]
+    
+    # Ensure fonts are embedded in PDF/PS files for portability
+    plt.rcParams["pdf.fonttype"] = 42
+    plt.rcParams["ps.fonttype"] = 42
 
-            # Updated LaTeX availability check
-            tex_manager = TexManager()
-            # Try a different method to check LaTeX availability
-            if hasattr(tex_manager, "latex_available"):
-                latex_available = tex_manager.latex_available
-            else:
-                # Fallback: try to create a simple LaTeX expression
-                try:
-                    tex_manager.make_tex("test", 12)
-                    latex_available = True
-                except Exception:
-                    latex_available = False
-
-            if latex_available:
-                plt.rcParams["text.usetex"] = True
-                plt.rcParams["pgf.texsystem"] = "pdflatex"
-                plt.rcParams["font.family"] = "serif"
-                plt.rcParams["font.serif"] = ["Computer Modern Roman"]
-                plt.rcParams["pgf.rcfonts"] = False
-                can_use_latex = True
-                print("Matplotlib configured to use LaTeX for text rendering.")
-            else:
-                print(
-                    "Warning: LaTeX installation not found or not fully functional. Falling back to default text rendering."
-                )
-        except Exception as e:
-            print(
-                f"Warning: Could not enable LaTeX for Matplotlib. Error: {e}. Falling back to default text rendering."
-            )
-
-    if not can_use_latex:
-        plt.rcParams["text.usetex"] = False
-        plt.rcParams["font.family"] = "sans-serif"
-        # Add PDF-compatible settings
-        plt.rcParams["pdf.fonttype"] = 42
-        plt.rcParams["ps.fonttype"] = 42
-
+    # --- General Plot Styling (Preserved from original) ---
     params = {
         "ytick.color": "black",
         "xtick.color": "black",
@@ -74,6 +51,7 @@ def apply_custom_plot_style(use_latex: bool = True):
     }
     plt.rcParams.update(params)
 
+    # Use a professional-looking plot style
     try:
         plt.style.use("seaborn-v0_8-whitegrid")
     except OSError:
@@ -81,5 +59,5 @@ def apply_custom_plot_style(use_latex: bool = True):
         plt.rcParams["axes.grid"] = True
 
     warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
+    print("Custom Matplotlib plot style applied (LaTeX rendering disabled).")
 
-    print("Custom Matplotlib plot style applied.")
