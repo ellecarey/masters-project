@@ -67,6 +67,7 @@ pyyaml==6.0.2
 pyzmq==26.4.0
 scikit-learn==1.6.1
 scipy==1.15.3
+seaborn==0.13.2
 setuptools==80.7.1
 six==1.17.0
 sqlalchemy==2.0.41
