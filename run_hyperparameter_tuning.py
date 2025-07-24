@@ -64,7 +64,7 @@ def objective(trial, data_config_path, tuning_config):
     X = data.drop(columns=["target"])
     y = data["target"]
     X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=global_seed
+        X, y, test_size=0.2, random_state=global_seed, stratify=y
     )
 
     train_dataset = TabularDataset(X_train, y_train)
@@ -86,7 +86,7 @@ def objective(trial, data_config_path, tuning_config):
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
 
     # --- Train and Validate the Model ---
-    trained_model = train_model(
+    trained_model, _ = train_model(
         model,
         train_loader,
         val_loader,
@@ -182,7 +182,38 @@ def plot_final_metrics(model, test_loader, device, experiment_name):
     plt.close()
     print(f"Saved ROC curve to: {roc_save_path}")
 
+def plot_training_history(history, experiment_name):
+    """
+    Plots the training and validation loss and accuracy over epochs.
+    """
+    epochs = range(1, len(history['train_loss']) + 1)
+    
+    # Create a figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    fig.suptitle(f'Training History for Best Model\n({experiment_name})', fontsize=16)
 
+    # --- Plot Loss ---
+    ax1.plot(epochs, history['train_loss'], 'o-', label='Training Loss')
+    ax1.plot(epochs, history['val_loss'], 'o-', label='Validation Loss')
+    ax1.set_ylabel('Loss (BCE)')
+    ax1.set_title('Model Loss Over Epochs')
+    ax1.legend()
+    ax1.grid(True, linestyle='--', alpha=0.6)
+
+    # --- Plot Accuracy ---
+    ax2.plot(epochs, history['train_acc'], 'o-', label='Training Accuracy')
+    ax2.plot(epochs, history['val_acc'], 'o-', label='Validation Accuracy')
+    ax2.set_ylabel('Accuracy')
+    ax2.set_xlabel('Epoch')
+    ax2.set_title('Model Accuracy Over Epochs')
+    ax2.legend()
+    ax2.grid(True, linestyle='--', alpha=0.6)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    save_path = f"reports/figures/{experiment_name}_training_history.pdf"
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Saved training history plot to: {save_path}")
 
 # --- 2. The Main Tuning Pipeline ---
 def main():
@@ -247,7 +278,7 @@ def main():
     
     # Create the same splits as run_training.py to get the test set
     X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=global_seed
+        X, y, test_size=0.2, random_state=global_seed, stratify=y
     )
 
     train_val_dataset = TabularDataset(X_train_val, y_train_val)
@@ -271,20 +302,23 @@ def main():
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(final_model.parameters(), lr=best_params["learning_rate"])
 
-    # Train on the combined training and validation data
-    trained_final_model = train_model(
+    # Train on the combined training and validation data and capture metrics
+    trained_final_model, history = train_model(
         final_model,
         train_val_loader,
-        train_val_loader, # Use the same loader for val since it's just for progress
+        train_val_loader, # Using the same loader for val is fine for this final training
         criterion,
         optimiser,
         best_params["epochs"],
         device=device,
     )
 
-    # 3. Generate and save plots using the held-out test set
+    # 3. Generate and save plots for the held-out test set
     experiment_name = f"{dataset_base_name}_tuning_best"
     plot_final_metrics(trained_final_model, test_loader, device, experiment_name)
+    
+    # 4. Generate and save the new training history plot
+    plot_training_history(history, experiment_name)
 
 if __name__ == "__main__":
     main()

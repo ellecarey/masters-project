@@ -106,11 +106,11 @@ def main():
     test_ratio = train_settings["test_set_ratio"]
 
     X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=(val_ratio + test_ratio), random_state=global_seed
+        X, y, test_size=(val_ratio + test_ratio), random_state=global_seed, stratify=y
     )
     relative_test_ratio = test_ratio / (val_ratio + test_ratio)
     X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=relative_test_ratio, random_state=global_seed
+        X_temp, y_temp, test_size=relative_test_ratio, random_state=global_seed, stratify=y_temp
     )
     print(
         f"Data split into: {len(X_train)} train, {len(X_val)} validation, {len(X_test)} test samples."
