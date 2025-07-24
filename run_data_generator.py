@@ -19,11 +19,6 @@ from src.data_generator_module.utils import (
 def main():
     """
     Runs the feature-based signal vs noise data generation pipeline.
-
-    This script generates datasets where:
-    - Signal samples are labeled based on feature combinations (target = 1)
-    - Noise samples are labeled based on feature combinations (target = 0)
-    - Neural networks must learn directly from original features
     """
     parser = argparse.ArgumentParser(
         description="Run feature-based signal vs noise data generation pipeline."
@@ -40,7 +35,6 @@ def main():
         action="store_true",
         help="Keep original config filename (don't rename)",
     )
-
     args = parser.parse_args()
 
     # Load configuration and set up reproducibility
@@ -65,7 +59,7 @@ def main():
 
     # Set the global random seed for reproducibility
     global_seed = config["global_settings"]["random_seed"]
-    set_global_seed(global_seed)
+    utils.set_global_seed(global_seed)
 
     # Generate unique experiment name from configuration
     experiment_name = create_filename_from_config(config)
@@ -85,8 +79,6 @@ def main():
     # Step 2: Create feature-based signal/noise classification target
     if "create_feature_based_signal_noise_classification" in config:
         feature_config = config["create_feature_based_signal_noise_classification"]
-
-        # Use the new separate distributions approach
         generator.create_feature_based_signal_noise_classification(
             signal_features=feature_config["signal_features"],
             noise_features=feature_config["noise_features"],
@@ -107,24 +99,23 @@ def main():
         vis_config = config["visualisation"]
         main_title, subtitle = create_plot_title_from_config(config)
 
-        # Only generate signal vs noise feature-wise plots with custom titles
-        if "create_feature_based_signal_noise_classification" in config:
-            plot_dir = vis_config.get("save_to_dir")
-            if plot_dir:
-                feature_wise_plot_path = os.path.join(
-                    plot_dir, f"{experiment_name}_feature_wise_signal_noise.pdf"
-                )
+        base_plot_dir = vis_config.get("save_to_dir", "reports/figures")
+        experiment_plot_dir = os.path.join(base_plot_dir, experiment_name)
+        os.makedirs(experiment_plot_dir, exist_ok=True)
 
-                # Pass the custom title and subtitle to the signal/noise visualisation
-                generator.visualise_signal_noise_by_features(
-                    save_path=feature_wise_plot_path,
-                    title=main_title,
-                    subtitle=subtitle,
-                )
+        if "create_feature_based_signal_noise_classification" in config:
+            feature_wise_plot_path = os.path.join(
+                experiment_plot_dir, f"feature_wise_signal_noise_{experiment_name}.pdf"
+            )
+            generator.visualise_signal_noise_by_features(
+                save_path=feature_wise_plot_path,
+                title=main_title,
+                subtitle=subtitle,
+            )
 
     # Step 5: Configuration management
     if not args.keep_original_name:
-        renamed_config_path = rename_config_file(config_path, experiment_name)
+        renamed_config_path = utils.rename_config_file(config_path, experiment_name)
         print(f"Configuration file available at: {renamed_config_path}")
     else:
         print(f"Configuration file kept at original location: {config_path}")

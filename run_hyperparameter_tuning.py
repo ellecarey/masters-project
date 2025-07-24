@@ -115,10 +115,10 @@ def objective(trial, data_config_path, tuning_config):
     auc = roc_auc_score(all_labels, all_scores)
     return auc
 
-def plot_final_metrics(model, test_loader, device, experiment_name):
+def plot_final_metrics(model, test_loader, device, experiment_name, base_filename, output_dir):
     """
     Evaluates the final model on the test set and plots the confusion matrix
-    and ROC curve.
+    and ROC curve inside the specified output directory.
     """
     model.eval()
     all_labels = []
@@ -131,10 +131,9 @@ def plot_final_metrics(model, test_loader, device, experiment_name):
             all_scores.extend(scores.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
-    # Get binary predictions for the confusion matrix
     all_preds = np.round(all_scores)
 
-    # --- 1. Plot and Save Confusion Matrix ---
+    # --- 1. Plot Confusion Matrix ---
     cm = confusion_matrix(all_labels, all_preds)
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
@@ -142,12 +141,12 @@ def plot_final_metrics(model, test_loader, device, experiment_name):
     plt.title(f'Confusion Matrix for Best Model\n({experiment_name})')
     plt.ylabel('Actual Class')
     plt.xlabel('Predicted Class')
-    cm_save_path = f"reports/figures/{experiment_name}_confusion_matrix.pdf"
+    cm_save_path = os.path.join(output_dir, f"confusion_matrix_{base_filename}.pdf")
     plt.savefig(cm_save_path, bbox_inches='tight')
     plt.close()
     print(f"\nSaved confusion matrix to: {cm_save_path}")
 
-    # --- 2. Plot and Save ROC Curve ---
+    # --- 2. Plot ROC Curve ---
     fpr, tpr, _ = roc_curve(all_labels, all_scores)
     roc_auc = auc(fpr, tpr)
     plt.figure(figsize=(8, 6))
@@ -159,18 +158,19 @@ def plot_final_metrics(model, test_loader, device, experiment_name):
     plt.ylabel('True Positive Rate')
     plt.title(f'Receiver Operating Characteristic (ROC)\n({experiment_name})')
     plt.legend(loc="lower right")
-    roc_save_path = f"reports/figures/{experiment_name}_roc_curve.pdf"
+    roc_save_path = os.path.join(output_dir, f"roc_curve_{base_filename}.pdf")
     plt.savefig(roc_save_path, bbox_inches='tight')
     plt.close()
     print(f"Saved ROC curve to: {roc_save_path}")
 
-def plot_training_history(history, experiment_name):
+
+def plot_training_history(history, experiment_name, base_filename, output_dir):
     """
-    Plots the training and validation loss and accuracy over epochs.
+    Plots the training and validation loss and accuracy over epochs,
+    saving the result to the specified output directory.
     """
     epochs = range(1, len(history['train_loss']) + 1)
     
-    # Create a figure with two subplots
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
     fig.suptitle(f'Training History for Best Model\n({experiment_name})', fontsize=16)
 
@@ -192,7 +192,7 @@ def plot_training_history(history, experiment_name):
     ax2.grid(True, linestyle='--', alpha=0.6)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    save_path = f"reports/figures/{experiment_name}_training_history.pdf"
+    save_path = os.path.join(output_dir, f"training_history_{base_filename}.pdf")
     plt.savefig(save_path)
     plt.close()
     print(f"Saved training history plot to: {save_path}")
@@ -229,7 +229,9 @@ def create_and_save_optimal_config(best_params, final_data_config_path, base_tra
 # --- 2. The Main Tuning Pipeline ---
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    parser = argparse.ArgumentParser(description="Run hyperparameter tuning.")
+    parser = argparse.ArgumentParser(description="Run the full hyperparameter tuning and evaluation pipeline.")
+    
+    # --- Arguments ---
     parser.add_argument(
         "--data-config",
         "-dc",
@@ -243,18 +245,6 @@ def main():
         help="Path to the tuning config file defining the hyperparameter search space.",
     )
     parser.add_argument(
-        "--base-training-config",
-        "-btc",
-        required=True,
-        help="Path to the base training config file to use as a template (e.g., model-001.yml).",
-    )
-    parser.add_argument(
-        "--final-data-config",
-        "-fdc",
-        required=True,
-        help="Path to the data config for the final large-scale training run.",
-    )
-    parser.add_argument(
         "--n-trials", type=int, default=50, help="Number of tuning trials to run."
     )
     args = parser.parse_args()
@@ -263,47 +253,87 @@ def main():
     with open(args.tuning_config, "r") as f:
         tuning_config = yaml.safe_load(f)
 
-    # --- Create an Optuna Study ---
+    # --- 1. Run the Optuna Optimization ---
     study = optuna.create_study(direction="maximize")
-
-    # --- Run the Optimization ---
     study.optimize(
         lambda trial: objective(trial, args.data_config, tuning_config),
         n_trials=args.n_trials,
     )
 
-    # --- Print the Best Results ---
+    # --- 2. Print the Best Results ---
     print("\n--- Hyperparameter Tuning Finished ---")
-    print(f"Number of finished trials: {len(study.trials)}")
-
     best_trial = study.best_trial
     print(f"Best trial found at trial number: {best_trial.number}")
     print(f"Best AUC-ROC Score: {best_trial.value:.4f}")
-
     print("\nBest hyperparameters:")
     for key, value in best_trial.params.items():
         print(f"  {key}: {value}")
 
-    # --- FINAL CONFIGURATION GENERATION ---
-    print("\n--- Generating Final Configuration File ---")
-
-    # Get the best parameters and ensure output_size is included
+    # --- 3. Train Final Model and Generate Plots ---
+    print("\n--- Training Final Model with Best Hyperparameters and Generating Plots ---")
+    
+    # Load configs and set up environment
+    data_config = data_utils.load_yaml_config(args.data_config)
+    global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
+    data_utils.set_global_seed(global_seed)
+    
+    # Load data
+    dataset_base_name = data_utils.create_filename_from_config(data_config)
+    dataset_filepath = os.path.join("data", f"{dataset_base_name}_dataset.csv")
+    data = pd.read_csv(dataset_filepath)
+    X = data.drop(columns=["target"])
+    y = data["target"]
+    
+    # Create splits: a combined set for training and a held-out test set
+    X_train_val, X_test, y_train_val, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=global_seed, stratify=y
+    )
+    
+    train_val_dataset = TabularDataset(X_train_val, y_train_val)
+    test_dataset = TabularDataset(X_test, y_test)
+    
     best_params = best_trial.params
-    best_params['output_size'] = 1
-
-    # Create and save the new config file for the large dataset
-    optimal_config_path = create_and_save_optimal_config(
-        best_params=best_params,
-        final_data_config_path=args.final_data_config,
-        base_training_config_path=args.base_training_config
+    train_val_loader = DataLoader(
+        dataset=train_val_dataset, batch_size=best_params["batch_size"], shuffle=True
+    )
+    test_loader = DataLoader(
+        dataset=test_dataset, batch_size=best_params["batch_size"], shuffle=False
     )
 
-    # --- Print Next Steps ---
-    print("\n--- Next Step: Final Training ---")
-    print("To train your final model on the large dataset, run the following command:")
-    print("\n" + "=" * 80)
-    print(f"uv run run_training.py -dc {args.final_data_config} -tc {optimal_config_path}")
-    print("=" * 80 + "\n")
+    # Initialize and train the final model on the combined training and validation data
+    final_model = MLP(
+        input_size=X.shape[1],
+        hidden_size=best_params["hidden_size"],
+        output_size=1
+    )
+    criterion = nn.BCEWithLogitsLoss()
+    optimiser = torch.optim.Adam(final_model.parameters(), lr=best_params["learning_rate"])
+
+    # Capture the training history for plotting
+    trained_final_model, history = train_model(
+        final_model,
+        train_val_loader,
+        train_val_loader, # Pass again for validation metrics during final training
+        criterion,
+        optimiser,
+        best_params["epochs"],
+        device=device,
+    )
+
+    # --- 4. Create Directory and Save All Plots ---
+    experiment_name = f"{dataset_base_name}_tuning_best"
+    
+    # Define the new, specific directory for this experiment's plots
+    output_plot_dir = os.path.join("reports/figures", dataset_base_name)
+    os.makedirs(output_plot_dir, exist_ok=True)
+
+    # Pass the new directory path to the plotting functions
+    experiment_name_for_title = f"{dataset_base_name}_tuning_best"
+    plot_final_metrics(trained_final_model, test_loader, device, experiment_name_for_title, dataset_base_name, output_plot_dir)
+    plot_training_history(history, experiment_name_for_title, dataset_base_name, output_plot_dir)
+
+    print("\n--- Pipeline Complete ---")
+
 
 if __name__ == "__main__":
     main()

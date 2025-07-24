@@ -55,47 +55,46 @@ def get_project_paths():
     return paths
 
 
-def create_filename_from_config(config: dict) -> str:
-    """Create unique filename for feature-based classification datasets."""
-    # Extract dataset settings
+def create_filename_from_config(config):
+    """
+    Creates a standardised filename base from a data generation config file.
+    UPDATED: Now includes the random seed for better traceability.
+    """
     dataset_settings = config.get("dataset_settings", {})
-    n_samples = dataset_settings.get("n_samples", 1000)
-    n_initial_features = dataset_settings.get("n_initial_features", 5)
+    class_config = config.get("create_feature_based_signal_noise_classification", {})
+    global_settings = config.get("global_settings", {}) # Get global settings
 
-    # Extract feature type distribution from the correct location
-    classification_config = config.get(
-        "create_feature_based_signal_noise_classification", {}
-    )
-    feature_types = classification_config.get("feature_types", {})
+    n_samples = dataset_settings.get("n_samples", 0)
+    n_features = dataset_settings.get("n_initial_features", 0)
+    
+    # Extract feature types for the name
+    feature_types = class_config.get("feature_types", {})
     continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
     discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
 
-    # Calculate average separation
-    signal_features = classification_config.get("signal_features", {})
-    noise_features = classification_config.get("noise_features", {})
-
-    separations = []
-    if signal_features and noise_features:
-        for feature_name in signal_features.keys():
-            if feature_name in noise_features:
-                signal_mean = signal_features[feature_name].get("mean", 0)
-                noise_mean = noise_features[feature_name].get("mean", 0)
-                separations.append(abs(signal_mean - noise_mean))
-
+    # Calculate average separation for the name
+    signal_features = class_config.get("signal_features", {})
+    noise_features = class_config.get("noise_features", {})
+    separations = [
+        abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0))
+        for f in signal_features if f in noise_features
+    ]
     avg_separation = sum(separations) / len(separations) if separations else 0.0
-    # Format separation for filename, replacing '.' with 'p'
-    sep_str = f"sep{str(round(avg_separation, 1)).replace('.', 'p')}"
+    
+    # --- NEW: Get the random seed ---
+    random_seed = global_settings.get("random_seed", 42)
 
-    # Simplified filename parts - removed fixed identifier and signal ratio
-    filename_parts = [
+    # Construct the filename
+    name_parts = [
         f"n{n_samples}",
-        f"f_init{n_initial_features}",
+        f"f_init{n_features}",
         f"cont{continuous_count}",
         f"disc{discrete_count}",
-        sep_str,
+        f"sep{str(avg_separation).replace('.', 'p')}",
+        f"seed{random_seed}"
     ]
 
-    return "_".join(filename_parts)
+    return "_".join(name_parts)
 
 
 def create_plot_title_from_config(config: dict) -> tuple[str, str]:
