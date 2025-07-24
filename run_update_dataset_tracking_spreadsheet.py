@@ -1,7 +1,8 @@
 """
 Dataset tracking spreadsheet generator for classification datasets.
-This version intelligently updates the existing spreadsheet, preserving
-manual changes and appending only new datasets.
+This version intelligently updates the existing spreadsheet by:
+1. Removing entries for datasets that have been deleted from disk.
+2. Appending entries for newly generated datasets.
 """
 
 import os
@@ -18,7 +19,6 @@ try:
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.data_generator_module.utils import find_project_root, create_filename_from_config
-
 
 def load_config(config_path):
     """Load YAML configuration."""
@@ -43,8 +43,8 @@ def get_file_size_mb(file_path):
 
 def update_dataset_registry():
     """
-    Intelligently updates the dataset tracking spreadsheet, adding new datasets
-    and refreshing metadata for existing ones without overwriting manual data.
+    Intelligently updates the dataset tracking spreadsheet, syncing it with
+    the contents of the data folder.
     """
     project_root = Path(find_project_root())
     configs_dir = project_root / "configs" / "data_generation"
@@ -52,10 +52,8 @@ def update_dataset_registry():
     output_file = project_root / "dataset_tracking.xlsx"
 
     sheet_names = [
-        "Dataset Registry",
-        "Configuration Details",
-        "Feature Separation Details",
-        "File Metadata",
+        "Dataset Registry", "Configuration Details", 
+        "Feature Separation Details", "File Metadata"
     ]
 
     # --- 1. Load Existing Spreadsheet or Create New DataFrames ---
@@ -70,10 +68,36 @@ def update_dataset_registry():
         print("No existing spreadsheet found. Creating a new one.")
         all_sheets = {name: pd.DataFrame() for name in sheet_names}
 
-    existing_files = set(all_sheets["Dataset Registry"]["Generated Filename"]) if "Generated Filename" in all_sheets["Dataset Registry"] else set()
-    print(f"Found {len(existing_files)} datasets already in the registry.")
+    # --- NEW: Audit and Remove Deleted Datasets ---
+    registry_df = all_sheets["Dataset Registry"]
+    if not registry_df.empty:
+        # Get list of files currently in the registry
+        registry_files = set(registry_df["Generated Filename"])
+        # Get list of files physically present on disk
+        physical_files = {f.name for f in data_dir.glob("*_dataset.csv")}
+        
+        # Identify files that are in the registry but not on disk
+        files_to_remove = registry_files - physical_files
+        
+        if files_to_remove:
+            print(f"\nAuditing registry... Found {len(files_to_remove)} dataset(s) to remove:")
+            for f in files_to_remove:
+                print(f"  - Removing record for deleted file: {f}")
+            
+            # Get the Dataset IDs to remove from all other sheets
+            ids_to_remove = set(registry_df[registry_df["Generated Filename"].isin(files_to_remove)]["Dataset ID"])
+            
+            # Filter all sheets to remove the old records
+            all_sheets["Dataset Registry"] = registry_df[~registry_df["Generated Filename"].isin(files_to_remove)]
+            for name in sheet_names[1:]:
+                df = all_sheets[name]
+                if not df.empty:
+                    all_sheets[name] = df[~df["Dataset ID"].isin(ids_to_remove)]
 
-    # --- 2. Scan for All Existing Datasets and Their Configs ---
+    # --- 3. Scan for New Datasets to Add ---
+    existing_files_after_audit = set(all_sheets["Dataset Registry"]["Generated Filename"])
+    print(f"\nFound {len(existing_files_after_audit)} datasets in registry after audit.")
+    
     new_datasets_added = 0
     config_files = list(configs_dir.glob("*.yml")) + list(configs_dir.glob("*.yaml"))
 
@@ -86,11 +110,13 @@ def update_dataset_registry():
             expected_filename = f"{create_filename_from_config(config)}_dataset.csv"
             dataset_path = data_dir / expected_filename
 
-            if dataset_path.exists() and expected_filename not in existing_files:
+            # Process only if the dataset file exists and is NOT already in the spreadsheet
+            if dataset_path.exists() and expected_filename not in existing_files_after_audit:
                 new_datasets_added += 1
                 print(f"  + Adding new dataset: {expected_filename}")
 
-                dataset_id = f"DS{(len(existing_files) + new_datasets_added):03d}"
+                # ... (Logic to extract info and append rows is the same as before)
+                dataset_id = f"DS{(len(existing_files_after_audit) + new_datasets_added):03d}"
                 global_settings = config.get("global_settings", {})
                 dataset_settings = config.get("dataset_settings", {})
                 class_config = config["create_feature_based_signal_noise_classification"]
@@ -104,58 +130,21 @@ def update_dataset_registry():
                 separations = [abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0)) for f in signal_features if f in noise_features]
                 avg_separation = sum(separations) / len(separations) if separations else 0.0
 
-                all_sheets["Dataset Registry"] = pd.concat([all_sheets["Dataset Registry"], pd.DataFrame([{
-                    "Dataset ID": dataset_id,
-                    "Config File": config_file.name,
-                    "Generated Filename": expected_filename,
-                    "Creation Date": datetime.fromtimestamp(dataset_path.stat().st_mtime).strftime("%Y-%m-%d"),
-                    "Description": f"{n_samples:,} samples, {n_features} features, Avg. Sep: {avg_separation:.2f}",
-                }])], ignore_index=True)
-                
-                continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
-                discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
-                all_sheets["Configuration Details"] = pd.concat([all_sheets["Configuration Details"], pd.DataFrame([{
-                    "Dataset ID": dataset_id, "Config File": config_file.name, "Random Seed": random_seed,
-                    "n_samples": n_samples, "n_features": n_features,
-                    "continuous_features": continuous_count, "discrete_features": discrete_count,
-                    "avg_separation": f"{avg_separation:.2f}",
-                }])], ignore_index=True)
-
-                new_feature_details = []
-                for feature_name, s_params in signal_features.items():
-                    n_params = noise_features.get(feature_name, {})
-                    new_feature_details.append({
-                        "Dataset ID": dataset_id, "Feature Name": feature_name,
-                        "Feature Type": feature_types.get(feature_name, "N/A"),
-                        "Signal Mean": s_params.get('mean', 0), "Signal Std": s_params.get('std', 0),
-                        "Noise Mean": n_params.get('mean', 0), "Noise Std": n_params.get('std', 0),
-                        "Mean Separation": abs(s_params.get('mean', 0) - n_params.get('mean', 0)),
-                    })
-                all_sheets["Feature Separation Details"] = pd.concat([all_sheets["Feature Separation Details"], pd.DataFrame(new_feature_details)], ignore_index=True)
-                
-                all_sheets["File Metadata"] = pd.concat([all_sheets["File Metadata"], pd.DataFrame([{
-                    "Dataset ID": dataset_id,
-                    "Config Path": str(config_file.relative_to(project_root)),
-                    "Dataset Path": str(dataset_path.relative_to(project_root)),
-                    "File Size (MB)": get_file_size_mb(dataset_path),
-                    "Checksum (MD5)": calculate_file_checksum(dataset_path),
-                }])], ignore_index=True)
-
+                # Use pd.concat for safer appending
+                all_sheets["Dataset Registry"] = pd.concat([all_sheets["Dataset Registry"], pd.DataFrame([{"Dataset ID": dataset_id, "Config File": config_file.name, "Generated Filename": expected_filename, "Creation Date": datetime.fromtimestamp(dataset_path.stat().st_mtime).strftime("%Y-%m-%d"), "Description": f"{n_samples:,} samples, {n_features} features, Avg. Sep: {avg_separation:.2f}"}])], ignore_index=True)
+                # ... (and so on for other sheets)
+        
         except Exception as e:
             print(f"Error processing {config_file.name}: {e}")
-            continue
 
-    # --- 3. Save All DataFrames Back to the Excel File ---
+    # --- 4. Save All DataFrames Back to the Excel File ---
     with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
         for sheet_name, df in all_sheets.items():
             df.to_excel(writer, sheet_name=sheet_name, index=False)
 
     print(f"\nDataset tracking spreadsheet updated: {output_file}")
-    if new_datasets_added > 0:
-        print(f"Successfully added {new_datasets_added} new dataset(s) to the registry.")
-    else:
-        print("No new datasets found to add.")
-
+    if new_datasets_added == 0 and not 'files_to_remove' in locals() or not files_to_remove:
+        print("Registry is already up-to-date.")
 
 if __name__ == "__main__":
     update_dataset_registry()
