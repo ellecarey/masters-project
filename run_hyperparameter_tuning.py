@@ -20,105 +20,77 @@ from src.training_module.dataset import TabularDataset
 from src.training_module.trainer import train_model
 
 
-# --- 1. The Objective Function ---
-# This function defines a single training and validation trial.
-def objective(trial, data_config_path, tuning_config):
+# --- 1. Objective Function (with sampling and AUC) ---
+def objective(trial, full_data, tuning_config, sample_size):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    if trial.number == 0:  # Print only for the first trial
+    if trial.number == 0:
         print(f"Using device: {device}")
-    try:
-        data_config = data_utils.load_yaml_config(data_config_path)
-        dataset_base_name = data_utils.create_filename_from_config(data_config)
-        dataset_filepath = os.path.join("data", f"{dataset_base_name}_dataset.csv")
-        data = pd.read_csv(dataset_filepath)
-    except FileNotFoundError:
-        print(f"Error: Dataset not found for config {data_config_path}")
-        return float("inf")
+        print(f"Tuning on a sample of {sample_size} rows for each trial.")
 
-    # --- Suggest Hyperparameters for this Trial (Corrected Logic) ---
+    # --Create a stratified sample from the full dataset ---
+    X_full = full_data.drop(columns=["target"])
+    y_full = full_data["target"]
+    
+    # Use train_test_split to create a random, stratified sample
+    # Use the trial number as a random seed for reproducibility of each trial
+    X_sample, _, y_sample, _ = train_test_split(
+        X_full, y_full, train_size=sample_size, stratify=y_full, random_state=trial.number
+    )
+
+    # --- Suggest Hyperparameters  ---
     search_space = tuning_config["search_space"]
     hyperparams = {}
     for param_name, params in search_space.items():
         param_type = params["type"]
-        # Create a clean copy of params, removing 'type'
         suggestion_params = {k: v for k, v in params.items() if k != "type"}
-
         if param_type == "int":
             hyperparams[param_name] = trial.suggest_int(param_name, **suggestion_params)
         elif param_type == "float":
-            hyperparams[param_name] = trial.suggest_float(
-                param_name, **suggestion_params
-            )
+            hyperparams[param_name] = trial.suggest_float(param_name, **suggestion_params)
         elif param_type == "categorical":
-            # suggest_categorical expects choices as a positional argument
-            hyperparams[param_name] = trial.suggest_categorical(
-                param_name, **suggestion_params
-            )
-
-    # Add the fixed output_size parameter
-    hyperparams["output_size"] = 1
-
-    # --- Standard Training Setup (no changes needed below this line) ---
-    global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
-    data_utils.set_global_seed(global_seed)
-
-    X = data.drop(columns=["target"])
-    y = data["target"]
+            hyperparams[param_name] = trial.suggest_categorical(param_name, **suggestion_params)
+    
+    # --- Standard Training Setup on the SAMPLE ---
+    data_utils.set_global_seed(trial.number) # Seed for weight initialization
+    
+    # Split the small sample into train/val for this trial
     X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=global_seed, stratify=y
+        X_sample, y_sample, test_size=0.2, random_state=trial.number, stratify=y_sample
     )
 
     train_dataset = TabularDataset(X_train, y_train)
     val_dataset = TabularDataset(X_val, y_val)
-
-    train_loader = DataLoader(
-        dataset=train_dataset, batch_size=hyperparams["batch_size"], shuffle=True
-    )
-    val_loader = DataLoader(
-        dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False
-    )
-
+    train_loader = DataLoader(dataset=train_dataset, batch_size=hyperparams["batch_size"], shuffle=True)
+    val_loader = DataLoader(dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
+    
+    # --- Model Instantiation and Training ---
     model_name = tuning_config["model_name"]
-
-    # Define which parameters are for the model's architecture
-    model_architecture_keys = ["input_size", "hidden_size", "output_size"]
-    
-    # Filter the hyperparameters to get only the ones for the model
+    model_architecture_keys = ["hidden_size"] # Only include architecture params
     model_params = {key: hyperparams[key] for key in hyperparams if key in model_architecture_keys}
-    model_params["input_size"] = X.shape[1] 
+    model_params["input_size"] = X_sample.shape[1]
     model_params["output_size"] = 1
-    model = get_model(model_name, model_params)
     
+    model = get_model(model_name, model_params)
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
-
-    # --- Train and Validate the Model ---
+    
     trained_model, _ = train_model(
-        model,
-        train_loader,
-        val_loader,
-        criterion,
-        optimiser,
-        hyperparams["epochs"],
-        device=device,
+        model, train_loader, val_loader, criterion, optimiser, hyperparams["epochs"], device
     )
 
-    # --- Evaluate on Validation Set and Return the Metric to Optimize ---
+    # --- Evaluate on Validation Set and Return the AUC Score ---
     trained_model.eval()
     all_scores = []
     all_labels = []
     with torch.no_grad():
         for features, labels in val_loader:
             features = features.to(device)
-            # Get the raw output scores from the model
             outputs = trained_model(features)
-            # Apply sigmoid to get probabilities, but do NOT round
             scores = torch.sigmoid(outputs)
             all_scores.extend(scores.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
     
-    # Maximize the AUC-ROC score
+    # Return the AUC score to be maximized by Optuna
     auc = roc_auc_score(all_labels, all_scores)
     return auc
 
@@ -234,41 +206,61 @@ def create_and_save_optimal_config(best_params, final_data_config_path, base_tra
     print(f"\nOptimal training configuration saved to: {save_path}")
     return save_path
 
-# --- 2. The Main Tuning Pipeline ---
+# --- 2. The Main Tuning Pipeline (with sampling) ---
+
 def main():
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    parser = argparse.ArgumentParser(description="Run the full hyperparameter tuning and evaluation pipeline.")
+
+    parser = argparse.ArgumentParser(description="Run hyperparameter tuning on a sample of a large dataset.")
     
     # --- Arguments ---
     parser.add_argument(
         "--data-config",
         "-dc",
         required=True,
-        help="Path to the data config file defining the dataset to tune on.",
+        help="Path to the LARGE data config file.",
     )
     parser.add_argument(
         "--tuning-config",
         "-tc",
         required=True,
-        help="Path to the tuning config file defining the hyperparameter search space.",
+        help="Path to the tuning config file for the desired model.",
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=10000,
+        help="Number of samples to use for each tuning trial.",
     )
     parser.add_argument(
         "--n-trials", type=int, default=50, help="Number of tuning trials to run."
     )
     args = parser.parse_args()
 
-    # Load the tuning configuration
+    # --- Load Full Dataset and Configs ---
     with open(args.tuning_config, "r") as f:
         tuning_config = yaml.safe_load(f)
+    
+    data_config = data_utils.load_yaml_config(args.data_config)
+    dataset_base_name = data_utils.create_filename_from_config(data_config)
+    dataset_filepath = os.path.join("data", f"{dataset_base_name}_dataset.csv")
+    
+    try:
+        full_data = pd.read_csv(dataset_filepath)
+        print(f"Loaded full dataset with {len(full_data):,} rows from {dataset_filepath}")
+    except FileNotFoundError:
+        print(f"Error: Dataset not found at {dataset_filepath}. Please generate it first.")
+        return
 
-    # --- 1. Run the Optuna Optimization ---
+    # --- Run Optuna Optimization on a Sample ---
     study = optuna.create_study(direction="maximize")
     study.optimize(
-        lambda trial: objective(trial, args.data_config, tuning_config),
+        lambda trial: objective(trial, full_data, tuning_config, args.sample_size),
         n_trials=args.n_trials,
     )
 
-    # --- 2. Print the Best Results ---
+    # --- Print Best Results ---
     print("\n--- Hyperparameter Tuning Finished ---")
     best_trial = study.best_trial
     print(f"Best trial found at trial number: {best_trial.number}")
@@ -277,22 +269,14 @@ def main():
     for key, value in best_trial.params.items():
         print(f"  {key}: {value}")
 
-    # --- 3. Train Final Model and Generate Plots ---
-    print("\n--- Training Final Model with Best Hyperparameters and Generating Plots ---")
-    
-    # Load configs and set up environment
-    data_config = data_utils.load_yaml_config(args.data_config)
+    # --- Train Final Model on FULL Data ---
+    print("\n--- Training Final Model on FULL Dataset with Best Hyperparameters ---")
     global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
     data_utils.set_global_seed(global_seed)
     
-    # Load data
-    dataset_base_name = data_utils.create_filename_from_config(data_config)
-    dataset_filepath = os.path.join("data", f"{dataset_base_name}_dataset.csv")
-    data = pd.read_csv(dataset_filepath)
-    X = data.drop(columns=["target"])
-    y = data["target"]
+    X = full_data.drop(columns=["target"])
+    y = full_data["target"]
     
-    # Create splits: a combined set for training and a held-out test set
     X_train_val, X_test, y_train_val, y_test = train_test_split(
         X, y, test_size=0.2, random_state=global_seed, stratify=y
     )
@@ -301,70 +285,42 @@ def main():
     test_dataset = TabularDataset(X_test, y_test)
     
     best_params = best_trial.params
-    train_val_loader = DataLoader(
-        dataset=train_val_dataset, batch_size=best_params["batch_size"], shuffle=True
-    )
-    test_loader = DataLoader(
-        dataset=test_dataset, batch_size=best_params["batch_size"], shuffle=False
-    )
-
-    # Initialise and train the final model on the combined training and validation data
-    model_name = tuning_config["model_name"]
-
-    model_architecture_keys = ["input_size", "hidden_size", "output_size"]
+    train_val_loader = DataLoader(dataset=train_val_dataset, batch_size=best_params["batch_size"], shuffle=True)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=best_params["batch_size"], shuffle=False)
     
+    model_name = tuning_config["model_name"]
+    model_architecture_keys = ["hidden_size"]
     model_params = {key: best_params[key] for key in best_params if key in model_architecture_keys}
     model_params["input_size"] = X.shape[1]
     model_params["output_size"] = 1
     
     final_model = get_model(model_name, model_params)
-    
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(final_model.parameters(), lr=best_params["learning_rate"])
-
-    # Capture the training history for plotting
+    
     trained_final_model, history = train_model(
-        final_model,
-        train_val_loader,
-        train_val_loader, # Pass again for validation metrics during final training
-        criterion,
-        optimiser,
-        best_params["epochs"],
-        device=device,
+        final_model, train_val_loader, train_val_loader, criterion, optimiser, best_params["epochs"], device=device
     )
 
-    # --- 4. Create Model-Specific Directory and Save All Plots ---
-
-    # Get the model name from the tuning config to create the subfolder
+    # --- Create Model-Specific Directory and Save All Plots ---
     model_name = tuning_config["model_name"]
-
-    # Define the path to the base directory for the dataset
     base_plot_dir = os.path.join("reports/figures", dataset_base_name)
-
-    # Create a model-specific subdirectory
     model_plot_dir = os.path.join(base_plot_dir, model_name)
     os.makedirs(model_plot_dir, exist_ok=True)
-
+    
     experiment_name_for_title = f"{dataset_base_name}_{model_name}_tuning_best"
-
+    
     plot_final_metrics(
-        trained_final_model,
-        test_loader,
-        device,
-        experiment_name_for_title,
-        dataset_base_name,  
-        model_plot_dir,
+        trained_final_model, test_loader, device, experiment_name_for_title, dataset_base_name, model_plot_dir
     )
-
+    
     plot_training_history(
-        history,
-        experiment_name_for_title,
-        dataset_base_name,  
-        model_plot_dir,
+        history, experiment_name_for_title, dataset_base_name, model_plot_dir
     )
-
+    
     print("\n--- Pipeline Complete ---")
     print(f"Plots for the {model_name} model have been saved in: {model_plot_dir}")
+
 
 
 if __name__ == "__main__":
