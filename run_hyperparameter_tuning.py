@@ -15,7 +15,7 @@ from sklearn.metrics import f1_score, roc_auc_score, confusion_matrix, roc_curve
 
 
 from src.data_generator_module import utils as data_utils
-from src.training_module.mlp_model import MLP
+from src.training_module.models import get_model
 from src.training_module.dataset import TabularDataset
 from src.training_module.trainer import train_model
 
@@ -24,6 +24,7 @@ from src.training_module.trainer import train_model
 # This function defines a single training and validation trial.
 def objective(trial, data_config_path, tuning_config):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
     if trial.number == 0:  # Print only for the first trial
         print(f"Using device: {device}")
     try:
@@ -78,11 +79,17 @@ def objective(trial, data_config_path, tuning_config):
         dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False
     )
 
-    model = MLP(
-        input_size=X.shape[1],
-        hidden_size=hyperparams["hidden_size"],
-        output_size=hyperparams["output_size"],
-    )
+    model_name = tuning_config["model_name"]
+
+    # Define which parameters are for the model's architecture
+    model_architecture_keys = ["input_size", "hidden_size", "output_size"]
+    
+    # Filter the hyperparameters to get only the ones for the model
+    model_params = {key: hyperparams[key] for key in hyperparams if key in model_architecture_keys}
+    model_params["input_size"] = X.shape[1] 
+    model_params["output_size"] = 1
+    model = get_model(model_name, model_params)
+    
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
 
@@ -141,7 +148,7 @@ def plot_final_metrics(model, test_loader, device, experiment_name, base_filenam
     plt.title(f'Confusion Matrix for Best Model\n({experiment_name})')
     plt.ylabel('Actual Class')
     plt.xlabel('Predicted Class')
-    cm_save_path = os.path.join(output_dir, f"confusion_matrix_{base_filename}.pdf")
+    cm_save_path = os.path.join(output_dir, "confusion_matrix.pdf")
     plt.savefig(cm_save_path, bbox_inches='tight')
     plt.close()
     print(f"\nSaved confusion matrix to: {cm_save_path}")
@@ -158,7 +165,7 @@ def plot_final_metrics(model, test_loader, device, experiment_name, base_filenam
     plt.ylabel('True Positive Rate')
     plt.title(f'Receiver Operating Characteristic (ROC)\n({experiment_name})')
     plt.legend(loc="lower right")
-    roc_save_path = os.path.join(output_dir, f"roc_curve_{base_filename}.pdf")
+    roc_save_path = os.path.join(output_dir, "roc_curve.pdf")
     plt.savefig(roc_save_path, bbox_inches='tight')
     plt.close()
     print(f"Saved ROC curve to: {roc_save_path}")
@@ -192,10 +199,11 @@ def plot_training_history(history, experiment_name, base_filename, output_dir):
     ax2.grid(True, linestyle='--', alpha=0.6)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    save_path = os.path.join(output_dir, f"training_history_{base_filename}.pdf")
+    save_path = os.path.join(output_dir, "training_history.pdf")
     plt.savefig(save_path)
     plt.close()
     print(f"Saved training history plot to: {save_path}")
+
 
 def create_and_save_optimal_config(best_params, final_data_config_path, base_training_config_path):
     """
@@ -300,12 +308,17 @@ def main():
         dataset=test_dataset, batch_size=best_params["batch_size"], shuffle=False
     )
 
-    # Initialize and train the final model on the combined training and validation data
-    final_model = MLP(
-        input_size=X.shape[1],
-        hidden_size=best_params["hidden_size"],
-        output_size=1
-    )
+    # Initialise and train the final model on the combined training and validation data
+    model_name = tuning_config["model_name"]
+
+    model_architecture_keys = ["input_size", "hidden_size", "output_size"]
+    
+    model_params = {key: best_params[key] for key in best_params if key in model_architecture_keys}
+    model_params["input_size"] = X.shape[1]
+    model_params["output_size"] = 1
+    
+    final_model = get_model(model_name, model_params)
+    
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(final_model.parameters(), lr=best_params["learning_rate"])
 
@@ -320,19 +333,38 @@ def main():
         device=device,
     )
 
-    # --- 4. Create Directory and Save All Plots ---
-    experiment_name = f"{dataset_base_name}_tuning_best"
-    
-    # Define the new, specific directory for this experiment's plots
-    output_plot_dir = os.path.join("reports/figures", dataset_base_name)
-    os.makedirs(output_plot_dir, exist_ok=True)
+    # --- 4. Create Model-Specific Directory and Save All Plots ---
 
-    # Pass the new directory path to the plotting functions
-    experiment_name_for_title = f"{dataset_base_name}_tuning_best"
-    plot_final_metrics(trained_final_model, test_loader, device, experiment_name_for_title, dataset_base_name, output_plot_dir)
-    plot_training_history(history, experiment_name_for_title, dataset_base_name, output_plot_dir)
+    # Get the model name from the tuning config to create the subfolder
+    model_name = tuning_config["model_name"]
+
+    # Define the path to the base directory for the dataset
+    base_plot_dir = os.path.join("reports/figures", dataset_base_name)
+
+    # Create a model-specific subdirectory
+    model_plot_dir = os.path.join(base_plot_dir, model_name)
+    os.makedirs(model_plot_dir, exist_ok=True)
+
+    experiment_name_for_title = f"{dataset_base_name}_{model_name}_tuning_best"
+
+    plot_final_metrics(
+        trained_final_model,
+        test_loader,
+        device,
+        experiment_name_for_title,
+        dataset_base_name,  
+        model_plot_dir,
+    )
+
+    plot_training_history(
+        history,
+        experiment_name_for_title,
+        dataset_base_name,  
+        model_plot_dir,
+    )
 
     print("\n--- Pipeline Complete ---")
+    print(f"Plots for the {model_name} model have been saved in: {model_plot_dir}")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,5 @@
+model_name: "LogisticRegression"
 search_space:
-  hidden_size:
-    type: int
-    low: 32
-    high: 256
-    step: 32
   learning_rate:
     type: float
     low: 1.0e-5

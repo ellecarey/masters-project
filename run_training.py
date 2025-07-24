@@ -11,7 +11,7 @@ import yaml
 from src.data_generator_module.utils import create_filename_from_config
 from src.data_generator_module import utils as data_utils
 from src.training_module import utils as train_utils
-from src.training_module.mlp_model import MLP
+from src.training_module.models import get_model
 from src.training_module.dataset import TabularDataset
 from src.training_module.trainer import train_model
 
@@ -132,11 +132,15 @@ def main():
     )
 
     # Initialise and train the model
-    model = MLP(
-        input_size=X_train.shape[1],
-        hidden_size=hyperparams["hidden_size"],
-        output_size=hyperparams["output_size"],
-    )
+    # Get model name and params from the config
+    model_name = train_settings["model_name"]
+    model_params = {
+        "input_size": X_train.shape[1],
+        **hyperparams  # Pass all hyperparameters from the config
+    }
+    
+    # Instantiate the correct model using the factory
+    model = get_model(model_name, model_params)
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
 
