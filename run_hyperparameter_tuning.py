@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 import yaml
 import optuna
+import matplotlib.pyplot as plt
+
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
@@ -173,29 +175,38 @@ def main():
 
     # --- 4. Generate and Save Tuning Visualisations ---
     print("\n--- Generating Tuning Visualisations ---")
-    model_name_suffix = Path(args.base_training_config).stem
-    output_plot_dir = os.path.join("reports", "figures", "training", f"{dataset_base_name}_{model_name_suffix}")
+    model_name = tuning_config["model_name"]
+    output_plot_dir = os.path.join("reports", "figures", dataset_base_name, model_name)
     os.makedirs(output_plot_dir, exist_ok=True)
     print(f"Saving plots to: {output_plot_dir}")
-
-    # Pareto Front Plot
-    pareto_plot = plot_pareto_front(study, target_names=["AUC", "Training Time (s)"])
-    pareto_plot.write_html(os.path.join(output_plot_dir, "tuning_pareto_front.html"))
-    print(f" - Saved Pareto front plot to: {output_plot_dir}/tuning_pareto_front.html")
-
-    # Optimisation History Plots for each objective
-    history_plot_auc = plot_optimization_history(study, target=lambda t: t.values[0], target_name="AUC")
-    history_plot_auc.write_html(os.path.join(output_plot_dir, "tuning_optimisation_history_auc.html"))
-    print(f" - Saved AUC optimisation history plot to: {output_plot_dir}/tuning_optimisation_history_auc.html")
-
-    history_plot_time = plot_optimization_history(study, target=lambda t: t.values[1], target_name="Training Time")
-    history_plot_time.write_html(os.path.join(output_plot_dir, "tuning_optimisation_history_time.html"))
-    print(f" - Saved Training Time optimisation history plot to: {output_plot_dir}/tuning_optimisation_history_time.html")
-
-    # Hyperparameter Importance Plot (for AUC)
-    importance_plot = plot_param_importances(study, target=lambda t: t.values[0], target_name="AUC")
-    importance_plot.write_html(os.path.join(output_plot_dir, "tuning_param_importances_auc.html"))
-    print(f" - Saved hyperparameter importance plot (for AUC) to: {output_plot_dir}/tuning_param_importances_auc.html")
+    
+    # a) Pareto Front Plot
+    plot_pareto_front(study, target_names=["AUC", "Training Time (s)"])
+    save_path = os.path.join(output_plot_dir, "tuning_pareto_front.pdf")
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close() # Free memory
+    print(f" - Saved Pareto front plot to: {save_path}")
+    
+    # b) Optimisation History Plot for AUC (Objective 0)
+    plot_optimization_history(study, target=lambda t: t.values[0], target_name="AUC")
+    save_path = os.path.join(output_plot_dir, "tuning_optimization_history_auc.pdf")
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    print(f" - Saved AUC optimisation history plot to: {save_path}")
+    
+    # c) Optimisation History Plot for Training Time (Objective 1)
+    plot_optimization_history(study, target=lambda t: t.values[1], target_name="Training Time (s)")
+    save_path = os.path.join(output_plot_dir, "tuning_optimization_history_time.pdf")
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    print(f" - Saved Training Time optimisation history plot to: {save_path}")
+    
+    # d) Hyperparameter Importance Plot (for AUC)
+    plot_param_importances(study, target=lambda t: t.values[0], target_name="AUC")
+    save_path = os.path.join(output_plot_dir, "tuning_param_importances_auc.pdf")
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    print(f" - Saved hyperparameter importance plot (for AUC) to: {save_path}")
 
     # --- 5. User Selects the Best Trial ---
     selected_trial = None

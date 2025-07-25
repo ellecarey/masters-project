@@ -2,10 +2,10 @@ source_data_config: configs/data_generation/n10000_f_init5_cont0_disc5_sep6p6_se
 source_training_config: configs/training/generated/n10000_f_init5_cont0_disc5_sep6p6_seed42_mlp_optimal.yml
 training_settings:
   hyperparameters:
-    batch_size: 128
-    epochs: 35
-    hidden_size: 64
-    learning_rate: 0.0004977180373049625
+    batch_size: 64
+    epochs: 10
+    hidden_size: 160
+    learning_rate: 3.81047019751266e-05
     output_size: 1
   model_name: MLP
   model_output_dir: models/
