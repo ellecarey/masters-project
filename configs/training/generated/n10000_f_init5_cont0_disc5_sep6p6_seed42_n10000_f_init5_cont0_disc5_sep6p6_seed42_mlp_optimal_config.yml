@@ -1,11 +1,11 @@
-source_data_config: configs/data_generation/n10000_f_init5_cont0_disc5_sep6p6_seed42_config.yml
+source_data_config: /home/jovyan/masters-project/configs/data_generation/n10000_f_init5_cont0_disc5_sep6p6_seed42_config.yml
 source_training_config: configs/training/generated/n10000_f_init5_cont0_disc5_sep6p6_seed42_mlp_optimal.yml
 training_settings:
   hyperparameters:
-    batch_size: 64
-    epochs: 10
-    hidden_size: 160
-    learning_rate: 3.81047019751266e-05
+    batch_size: 128
+    epochs: 5
+    hidden_size: 96
+    learning_rate: 0.004787001987145947
     output_size: 1
   model_name: MLP
   model_output_dir: models/
