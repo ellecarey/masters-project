@@ -6,7 +6,11 @@ import os
 import shutil
 from pathlib import Path
 import yaml
-
+import matplotlib.pyplot as plt
+import seaborn as sns
+import torch
+import numpy as np
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 def find_project_root():
     """Find the project root by searching upwards for a marker file."""
@@ -195,3 +199,84 @@ def rename_config_file(original_config_path, experiment_name):
     except Exception as e:
         print(f"Warning: Could not rename config file: {e}")
         return str(config_path)
+
+def plot_training_history(history, experiment_name, output_dir):
+    """
+    Plots the training and validation loss and accuracy over epochs,
+    saving the result to the specified output directory.
+    """
+    epochs = range(1, len(history['train_loss']) + 1)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    fig.suptitle(f'Training History for {experiment_name}', fontsize=16)
+
+    # Plot Loss
+    ax1.plot(epochs, history['train_loss'], 'o-', label='Training Loss')
+    ax1.plot(epochs, history['val_loss'], 'o-', label='Validation Loss')
+    ax1.set_ylabel('Loss (BCE)')
+    ax1.set_title('Model Loss Over Epochs')
+    ax1.legend()
+    ax1.grid(True, linestyle='--', alpha=0.6)
+
+    # Plot Accuracy
+    ax2.plot(epochs, history['train_acc'], 'o-', label='Training Accuracy')
+    ax2.plot(epochs, history['val_acc'], 'o-', label='Validation Accuracy')
+    ax2.set_ylabel('Accuracy')
+    ax2.set_xlabel('Epoch')
+    ax2.set_title('Model Accuracy Over Epochs')
+    ax2.legend()
+    ax2.grid(True, linestyle='--', alpha=0.6)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    save_path = os.path.join(output_dir, "training_history.pdf")
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Saved training history plot to: {save_path}")
+
+def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
+    """
+    Evaluates the final model on the test set and plots the confusion matrix
+    and ROC curve inside the specified output directory.
+    """
+    model.eval()
+    all_labels = []
+    all_scores = []
+    with torch.no_grad():
+        for features, labels in test_loader:
+            features = features.to(device)
+            outputs = model(features)
+            scores = torch.sigmoid(outputs)
+            all_scores.extend(scores.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+    
+    all_preds = np.round(all_scores)
+
+    # Plot Confusion Matrix
+    cm = confusion_matrix(all_labels, all_preds)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['Noise', 'Signal'], yticklabels=['Noise', 'Signal'])
+    plt.title(f'Confusion Matrix for {experiment_name}')
+    plt.ylabel('Actual Class')
+    plt.xlabel('Predicted Class')
+    cm_save_path = os.path.join(output_dir, "confusion_matrix.pdf")
+    plt.savefig(cm_save_path, bbox_inches='tight')
+    plt.close()
+    print(f"\nSaved confusion matrix to: {cm_save_path}")
+
+    # Plot ROC Curve
+    fpr, tpr, _ = roc_curve(all_labels, all_scores)
+    roc_auc = auc(fpr, tpr)
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.4f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'Receiver Operating Characteristic (ROC)\n({experiment_name})')
+    plt.legend(loc="lower right")
+    roc_save_path = os.path.join(output_dir, "roc_curve.pdf")
+    plt.savefig(roc_save_path, bbox_inches='tight')
+    plt.close()
+    print(f"Saved ROC curve to: {roc_save_path}")
+

@@ -1,0 +1,15 @@
+model_name: "LogisticRegression"
+search_space:
+  learning_rate:
+    type: float
+    low: 1.0e-5
+    high: 1.0e-2
+    log: true
+  batch_size:
+    type: categorical
+    choices: [32, 64, 128]
+  epochs:
+    type: int
+    low: 5
+    high: 50
+    step: 5

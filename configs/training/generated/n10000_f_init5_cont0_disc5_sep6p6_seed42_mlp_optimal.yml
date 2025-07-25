@@ -1,0 +1,13 @@
+training_settings:
+  output_data_dir: data/
+  target_column: target
+  model_output_dir: models/
+  test_set_ratio: 0.2
+  validation_set_ratio: 0.2
+  hyperparameters:
+    hidden_size: 64
+    output_size: 1
+    learning_rate: 0.0004977180373049625
+    epochs: 35
+    batch_size: 128
+  model_name: MLP
