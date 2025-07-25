@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import yaml
 import optuna
+import copy
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
@@ -25,22 +26,35 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
     """
     X_full = full_data.drop(columns=["target"])
     y_full = full_data["target"]
-    X_sample, _, y_sample, _ = train_test_split(
-        X_full, y_full, train_size=sample_fraction, stratify=y_full, random_state=trial.number
-    )
 
+    if sample_fraction >= 1.0:
+        X_sample, y_sample = X_full, y_full
+    else:
+        X_sample, _, y_sample, _ = train_test_split(
+            X_full, y_full, train_size=sample_fraction, stratify=y_full, random_state=trial.number
+        )
+
+    # Suggest tunable hyperparameters from the search space
     search_space = tuning_config["search_space"]
     hyperparams = {}
-    for param_name, params in search_space.items():
-        param_type = params["type"]
-        suggestion_params = {k: v for k, v in params.items() if k != "type"}
-        if param_type == "int":
-            hyperparams[param_name] = trial.suggest_int(param_name, **suggestion_params)
-        elif param_type == "float":
-            hyperparams[param_name] = trial.suggest_float(param_name, **suggestion_params)
-        elif param_type == "categorical":
-            hyperparams[param_name] = trial.suggest_categorical(param_name, **suggestion_params)
+    for param_name, params_config in search_space.items():
+        # Create a shallow copy to prevent modifying the original config dict
+        params = copy.copy(params_config)
+        param_type = params.pop("type")
 
+        if param_type == "int":
+            if "step" in params:
+                hyperparams[param_name] = trial.suggest_int(
+                    param_name, params["low"], params["high"], step=params["step"]
+                )
+            else:
+                hyperparams[param_name] = trial.suggest_int(param_name, **params)
+        elif param_type == "float":
+            hyperparams[param_name] = trial.suggest_float(param_name, **params)
+        elif param_type == "categorical":
+            hyperparams[param_name] = trial.suggest_categorical(param_name, **params)
+
+    # Set up model parameters
     model_name = tuning_config["model_name"]
     ARCH_PARAMS = {
         "MLP": {"hidden_size"},
@@ -54,6 +68,7 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
     
     model = get_model(model_name, model_params)
 
+    # Set up data loaders and training components
     data_utils.set_global_seed(trial.number)
     X_train, X_val, y_train, y_val = train_test_split(
         X_sample, y_sample, test_size=0.2, random_state=trial.number, stratify=y_sample
@@ -66,6 +81,7 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
 
+    # Train and evaluate the model
     start_time = time.time()
     trained_model, _ = train_model(
         model, train_loader, val_loader, criterion, optimiser, hyperparams["epochs"], device

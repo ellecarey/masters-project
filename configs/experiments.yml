@@ -2,7 +2,7 @@ tuning_jobs:
   logistic-regression:
     description: "Tune Logistic Regression"
     num_workers: 4
-    n_trials: 50
+    n_trials: 100
     sample_fraction: 1.0
     tuning_config: "configs/tuning/logistic-regression.yml"
     base_training_config: "configs/training/templates/logistic-regression.yml"
@@ -10,7 +10,7 @@ tuning_jobs:
   mlp:
     description: "Tune MLP"
     num_workers: 4
-    n_trials: 50
+    n_trials: 100
     sample_fraction: 1.0
     tuning_config: "configs/tuning/mlp.yml"
     base_training_config: "configs/training/templates/mlp.yml"

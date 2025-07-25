@@ -4,10 +4,13 @@ from pathlib import Path
 import yaml
 import optuna
 import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import warnings
 
-# Import utility functions
 from src.data_generator_module import utils as data_utils
 from optuna.visualization.matplotlib import plot_pareto_front, plot_optimization_history, plot_param_importances
+from optuna.exceptions import ExperimentalWarning
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 def create_and_save_optimal_config(best_params, final_data_config_path, base_training_config_path, tuning_config):
     """

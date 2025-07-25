@@ -15,6 +15,6 @@ search_space:
     choices: [32, 64, 128]
   epochs:
     type: int
-    low: 5
+    low: 20
     high: 50
     step: 5
