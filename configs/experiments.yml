@@ -1,8 +1,8 @@
 tuning_jobs:
   mlp_001:
     description: "tune mlp_001"
-    num_workers: 16
-    n_trials: 5
-    sample_fraction: 0.2
+    num_workers: 20
+    n_trials: 100
+    sample_fraction: 0.1
     tuning_config: "configs/tuning/mlp_001.yml"
     base_training_config: "configs/training/templates/mlp_001.yml"

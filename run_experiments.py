@@ -101,58 +101,77 @@ def main():
     )
     print(f"Successfully created or loaded study '{study_name}' in '{storage_name}'")
 
-    # --- Launch Parallel Workers ---
+   # --- Launch Parallel Workers ---
     print(f"\n--- Starting Job: {args.job} ---")
     print(f"Number of parallel workers: {job_params['num_workers']}")
     print("-" * 35)
 
-    # Calculate how many trials each worker should aim for.
-    # The total number of trials will be controlled by the main progress bar loop.
     n_trials_per_worker = (job_params['n_trials'] + job_params['num_workers'] - 1) // job_params['num_workers']
-
     command = [
         "uv", "run", "run_hyperparameter_tuning.py",
         "--data-config", str(selected_data_config_path),
         "--tuning-config", str((project_root / job_params["tuning_config"]).resolve()),
         "--base-training-config", str(base_training_config_path.resolve()),
-        "--n-trials", str(job_params["n_trials"]),
+        "--n-trials", str(n_trials_per_worker),
         "--sample-fraction", str(job_params["sample_fraction"]),
     ]
-
     workers = []
     for i in range(job_params['num_workers']):
-        # Redirect worker output to DEVNULL to keep the console clean
         process = subprocess.Popen(command, cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         workers.append(process)
     print(f"All {len(workers)} workers launched. Monitoring study progress...")
 
     # --- Monitor Progress by Polling the Database ---
-    total_trials = job_params['n_trials']
+    total_trials_to_run = job_params['n_trials']
     bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
-
-    with tqdm(total=total_trials, desc="Overall Tuning Progress", bar_format=bar_format) as pbar:
+    
+    with tqdm(total=total_trials_to_run, desc="Overall Tuning Progress", bar_format=bar_format) as pbar:
         finished_trial_count = 0
-        while finished_trial_count < total_trials:
+        while finished_trial_count < total_trials_to_run:
             try:
                 study = optuna.load_study(study_name=study_name, storage=storage_name)
                 
-                # Get counts of all trial states
                 all_trials = study.get_trials(deepcopy=False)
-                finished_states = [TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL]
-                current_finished = len([t for t in all_trials if t.state in finished_states])
-
-                # Update progress bar
-                pbar.update(current_finished - finished_trial_count)
-                finished_trial_count = current_finished
-
-                # Break if all workers have exited AND we have the expected number of trials
-                if finished_trial_count >= total_trials and all(p.poll() is not None for p in workers):
-                    break
+                finished_trials = [t for t in all_trials if t.state in [TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL]]
                 
-                time.sleep(2) # Poll every 2 seconds
+                pbar.update(len(finished_trials) - finished_trial_count)
+                finished_trial_count = len(finished_trials)
+
+                best_value = None
+                if study.best_trial and study.best_trial.state == TrialState.COMPLETE:
+                    best_value = study.best_value
+                
+                running_trials = [t for t in all_trials if t.state == TrialState.RUNNING]
+                postfix_str = (
+                    f"Running: {len(running_trials)}, "
+                    f"Pruned: {len([t for t in finished_trials if t.state == TrialState.PRUNED])}, "
+                    f"Best AUC: {best_value:.4f}" if best_value is not None else "Best AUC: N/A"
+                )
+                pbar.set_postfix_str(postfix_str)
+
+                if all(p.poll() is not None for p in workers) and not running_trials:
+                    if finished_trial_count >= total_trials_to_run:
+                        break
+                
+                time.sleep(2)
+            except KeyboardInterrupt:
+                print("\nKeyboard interrupt received. Stopping monitoring.")
+                break
+            except ValueError as e:
+                # THIS IS THE KEY CHANGE: Silently ignore the expected race condition error
+                if "Record does not exist" in str(e):
+                    time.sleep(1) # Wait a moment and let the loop retry
+                    continue
+                else:
+                    print(f"\nAn unexpected ValueError occurred: {e}")
+                    break
             except Exception as e:
-                print(f"\nError while monitoring study: {e}")
-                time.sleep(5)
+                print(f"\nAn unexpected error occurred: {e}")
+                break
+        
+        if pbar.n < total_trials_to_run:
+            pbar.update(total_trials_to_run - pbar.n)
+        pbar.set_postfix_str("Complete")
 
     print("\n--- All workers have finished. Job complete. ---")
     

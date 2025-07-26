@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import warnings
 
 from src.data_generator_module import utils as data_utils
+from optuna.trial import TrialState
 from optuna.visualization.matplotlib import plot_pareto_front, plot_optimization_history, plot_param_importances
 from optuna.exceptions import ExperimentalWarning
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
@@ -76,7 +77,16 @@ def main():
     except KeyError:
         print(f"\nError: Study '{study_name}' not found in the database.")
         return
-
+    completed_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+    if len(completed_trials) == 0:
+        print("\nError: No trials in the study completed successfully.")
+        print("This may be because all trials were pruned, failed, or the job was interrupted.")
+        print("Cannot determine the best hyperparameters. Please check the tuning logs.")
+        pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+        failed_trials = study.get_trials(deepcopy=False, states=[TrialState.FAIL])
+        print(f"Summary: {len(pruned_trials)} trials pruned, {len(failed_trials)} trials failed.")
+        return
+        
     # --- 3. Print Best Trial Result (Single-Objective) ---
     best_trial = study.best_trial
     if not best_trial:

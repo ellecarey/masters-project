@@ -2,6 +2,7 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 import optuna
+import copy
 
 def train_model(
     model: torch.nn.Module,
@@ -11,41 +12,40 @@ def train_model(
     optimiser: torch.optim.Optimizer,
     epochs: int,
     device: str,
-    trial: optuna.trial.Trial = None, # Add trial as an optional argument
+    trial: optuna.trial.Trial = None,
+    patience: int = 5,
 ):
     """
-    Model training and validation loops. Now supports Optuna pruning.
+    Model training and validation loops. This version is silent to ensure
+    clean output when run by parallel workers.
     """
     model.to(device)
-    print(f"Starting model training on device: '{device}'...")
+    
     history = {
-        "train_loss": [],
-        "val_loss": [],
-        "train_acc": [],
-        "val_acc": [],
+        "train_loss": [], "val_loss": [],
+        "train_acc": [], "val_acc": [],
     }
+
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+    best_model_state = None
 
     for epoch in range(epochs):
         # --- Training Loop ---
         model.train()
         train_loss, correct_train, total_train = 0.0, 0, 0
-        train_progress_bar = tqdm(
-            train_loader, desc=f"Epoch {epoch + 1}/{epochs} [Train]"
-        )
-
-        for features, labels in train_progress_bar:
+        # Use a non-visual progress bar when running as a worker
+        for features, labels in train_loader:
             features, labels = features.to(device), labels.to(device)
             optimiser.zero_grad()
             outputs = model(features)
             loss = criterion(outputs, labels)
             loss.backward()
             optimiser.step()
-
             train_loss += loss.item()
             preds = torch.round(torch.sigmoid(outputs))
             total_train += labels.size(0)
             correct_train += (preds == labels).sum().item()
-            train_progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
 
         avg_train_loss = train_loss / len(train_loader)
         train_accuracy = correct_train / total_train
@@ -69,19 +69,27 @@ def train_model(
         val_accuracy = correct_val / total_val
         history["val_loss"].append(avg_val_loss)
         history["val_acc"].append(val_accuracy)
-
-        print(
-            f"Epoch {epoch + 1}/{epochs} -> Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.4f} | Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.4f}"
-        )
+        
+        # --- Early Stopping Logic ---
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            epochs_no_improve = 0
+            best_model_state = copy.deepcopy(model.state_dict())
+        else:
+            epochs_no_improve += 1
+        
+        if epochs_no_improve >= patience:
+            if best_model_state:
+                model.load_state_dict(best_model_state)
+            break
 
         # --- Pruning Logic ---
         if trial:
-            # Report the validation accuracy to Optuna
             trial.report(val_accuracy, epoch)
-
-            # Check if the trial should be pruned
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-    print("Training finished.")
+    if best_model_state:
+        model.load_state_dict(best_model_state)
+
     return model, history

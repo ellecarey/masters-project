@@ -5,9 +5,9 @@ training_settings:
   test_set_ratio: 0.2
   validation_set_ratio: 0.2
   hyperparameters:
-    hidden_size: 256
+    hidden_size: 64
     output_size: 1
-    learning_rate: 0.009258327913310807
-    epochs: 20
+    learning_rate: 0.0006554271358472524
+    epochs: 35
     batch_size: 32
   model_name: mlp_001

@@ -3,9 +3,9 @@ source_training_config: configs/training/generated/n10000_f_init5_cont0_disc5_se
 training_settings:
   hyperparameters:
     batch_size: 32
-    epochs: 20
-    hidden_size: 256
-    learning_rate: 0.009258327913310807
+    epochs: 35
+    hidden_size: 64
+    learning_rate: 0.0006554271358472524
     output_size: 1
   model_name: mlp_001
   model_output_dir: models/
