@@ -19,14 +19,13 @@ from src.training_module.models import get_model
 from src.training_module.dataset import TabularDataset
 from src.training_module.trainer import train_model
 
-def objective(trial, full_data, tuning_config, sample_fraction, device):
+def objective(trial, full_data, tuning_config, sample_fraction, device, fixed_epochs):
     """
-    The objective function for Optuna to optimise.
-    It trains a model on a sample of the data and returns performance (AUC) and training time.
+    The objective function for Optuna.
     """
+    # Create a sample of the data for this trial
     X_full = full_data.drop(columns=["target"])
     y_full = full_data["target"]
-
     if sample_fraction >= 1.0:
         X_sample, y_sample = X_full, y_full
     else:
@@ -38,17 +37,11 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
     search_space = tuning_config["search_space"]
     hyperparams = {}
     for param_name, params_config in search_space.items():
-        # Create a shallow copy to prevent modifying the original config dict
+        # This line now works correctly because copy is imported
         params = copy.copy(params_config)
         param_type = params.pop("type")
-
         if param_type == "int":
-            if "step" in params:
-                hyperparams[param_name] = trial.suggest_int(
-                    param_name, params["low"], params["high"], step=params["step"]
-                )
-            else:
-                hyperparams[param_name] = trial.suggest_int(param_name, **params)
+            hyperparams[param_name] = trial.suggest_int(param_name, **params)
         elif param_type == "float":
             hyperparams[param_name] = trial.suggest_float(param_name, **params)
         elif param_type == "categorical":
@@ -56,16 +49,11 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
 
     # Set up model parameters
     model_name = tuning_config["model_name"]
-    ARCH_PARAMS = {
-        "mlp_001": {"hidden_size"},
-        "LogisticRegression": {}
-    }
+    ARCH_PARAMS = {"mlp_001": {"hidden_size"}}
     valid_arch_keys = ARCH_PARAMS.get(model_name, set())
     model_params = {key: hyperparams[key] for key in hyperparams if key in valid_arch_keys}
-    
     model_params["input_size"] = X_sample.shape[1]
     model_params["output_size"] = 1
-    
     model = get_model(model_name, model_params)
 
     # Set up data loaders and training components
@@ -77,24 +65,19 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
     val_dataset = TabularDataset(X_val, y_val)
     train_loader = DataLoader(dataset=train_dataset, batch_size=hyperparams["batch_size"], shuffle=True)
     val_loader = DataLoader(dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
-
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
 
     # Train and evaluate the model
     start_time = time.time()
-    
     try:
         trained_model, _ = train_model(
-            model, train_loader, val_loader, criterion, optimiser, hyperparams["epochs"], device, trial
+            model, train_loader, val_loader, criterion, optimiser, fixed_epochs, device, trial
         )
     except optuna.TrialPruned:
-        # Re-raise the exception to signal that the trial was pruned
         raise
-    
+
     training_time = time.time() - start_time
-    
-    # Store the training time as a user attribute
     trial.set_user_attr("training_time", training_time)
 
     # Evaluate on the validation set to get the final AUC for this trial
@@ -107,14 +90,14 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
             scores = torch.sigmoid(outputs)
             all_scores.extend(scores.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
-    
+
     auc = roc_auc_score(all_labels, all_scores)
     return auc
 
+
 def main():
     """
-    Main function for a worker to run Optuna trials. This script now uses
-    the n_trials parameter directly for simpler, more robust distributed tuning.
+    Main function for a worker to run Optuna trials
     """
     parser = argparse.ArgumentParser(description="Run distributed hyperparameter tuning.")
     parser.add_argument("--data-config", "-dc", required=True, help="Path to the data config file to sample from.")
@@ -124,10 +107,15 @@ def main():
     parser.add_argument("--n-trials", type=int, default=50, help="Number of tuning trials this worker should attempt to run.")
     args = parser.parse_args()
 
-    # --- 1. Load Full Dataset and Configs ---
+   # --- 1. Load Full Dataset and Configs ---
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tuning_config = data_utils.load_yaml_config(args.tuning_config)
     data_config = data_utils.load_yaml_config(args.data_config)
+    
+    # -Load the base training config to get the fixed epochs ---
+    base_training_config = data_utils.load_yaml_config(args.base_training_config)
+    fixed_epochs = base_training_config["training_settings"]["hyperparameters"]["epochs"]
+
     dataset_base_name = data_utils.create_filename_from_config(data_config)
     dataset_filepath = os.path.join("data", f"{dataset_base_name}_dataset.csv")
 
@@ -151,7 +139,7 @@ def main():
 
     # --- 3. Run Optuna Optimisation
     study.optimize(
-        lambda trial: objective(trial, full_data, tuning_config, args.sample_fraction, device),
+        lambda trial: objective(trial, full_data, tuning_config, args.sample_fraction, device, fixed_epochs),
         n_trials=args.n_trials,
     )
 

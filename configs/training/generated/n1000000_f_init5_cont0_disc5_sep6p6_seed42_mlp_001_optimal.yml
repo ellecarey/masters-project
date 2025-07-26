@@ -7,7 +7,7 @@ training_settings:
   hyperparameters:
     hidden_size: 128
     output_size: 1
-    learning_rate: 0.0026972198113268935
+    learning_rate: 0.0059733368155636705
     epochs: 50
-    batch_size: 64
+    batch_size: 32
   model_name: mlp_001

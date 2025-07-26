@@ -117,6 +117,11 @@ def main():
     ]
     workers = []
     for i in range(job_params['num_workers']):
+    #      if i == 0:
+    #         # Let the first worker print its output to the console
+    #         print("Launching worker 1 with output enabled for debugging...")
+    #         process = subprocess.Popen(command, cwd=project_root) # No output redirection
+    # else: # fordeubggin purposes
         process = subprocess.Popen(command, cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         workers.append(process)
     print(f"All {len(workers)} workers launched. Monitoring study progress...")
@@ -149,18 +154,19 @@ def main():
                 )
                 pbar.set_postfix_str(postfix_str)
 
-                if all(p.poll() is not None for p in workers) and not running_trials:
-                    if finished_trial_count >= total_trials_to_run:
-                        break
-                
+                all_workers_exited = all(p.poll() is not None for p in workers)
+                if len(finished_trials) >= total_trials_to_run or (all_workers_exited and len(running_trials) == 0):
+                    pbar.n = total_trials_to_run # Ensure the bar completes to 100%
+                    pbar.refresh()
+                    break
+
                 time.sleep(2)
             except KeyboardInterrupt:
                 print("\nKeyboard interrupt received. Stopping monitoring.")
                 break
             except ValueError as e:
-                # THIS IS THE KEY CHANGE: Silently ignore the expected race condition error
                 if "Record does not exist" in str(e):
-                    time.sleep(1) # Wait a moment and let the loop retry
+                    time.sleep(1)
                     continue
                 else:
                     print(f"\nAn unexpected ValueError occurred: {e}")
@@ -169,8 +175,6 @@ def main():
                 print(f"\nAn unexpected error occurred: {e}")
                 break
         
-        if pbar.n < total_trials_to_run:
-            pbar.update(total_trials_to_run - pbar.n)
         pbar.set_postfix_str("Complete")
 
     print("\n--- All workers have finished. Job complete. ---")

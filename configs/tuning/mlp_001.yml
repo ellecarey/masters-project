@@ -13,8 +13,3 @@ search_space:
   batch_size:
     type: categorical
     choices: [32, 64, 128]
-  epochs:
-    type: int
-    low: 20
-    high: 50
-    step: 5
