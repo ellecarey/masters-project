@@ -141,7 +141,7 @@ def main():
     model_name = train_settings["model_name"]
     ARCH_PARAMS = {
         "LogisticRegression": {"output_size"},
-        "MLP": {"hidden_size", "output_size"}
+        "mlp_001": {"hidden_size", "output_size"}
     }
     
     # Filter the loaded hyperparameters to get only the architectural ones.

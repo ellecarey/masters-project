@@ -1,6 +1,7 @@
 import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+import optuna
 
 def train_model(
     model: torch.nn.Module,
@@ -10,14 +11,13 @@ def train_model(
     optimiser: torch.optim.Optimizer,
     epochs: int,
     device: str,
+    trial: optuna.trial.Trial = None, # Add trial as an optional argument
 ):
     """
-    Model training and validation loops. Now captures and returns a history of metrics.
+    Model training and validation loops. Now supports Optuna pruning.
     """
     model.to(device)
     print(f"Starting model training on device: '{device}'...")
-
-    # Initialise a dictionary to store metrics for each epoch
     history = {
         "train_loss": [],
         "val_loss": [],
@@ -40,14 +40,13 @@ def train_model(
             loss = criterion(outputs, labels)
             loss.backward()
             optimiser.step()
-            train_loss += loss.item()
 
-            # Calculate training accuracy for the batch
+            train_loss += loss.item()
             preds = torch.round(torch.sigmoid(outputs))
             total_train += labels.size(0)
             correct_train += (preds == labels).sum().item()
             train_progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
-        
+
         avg_train_loss = train_loss / len(train_loader)
         train_accuracy = correct_train / total_train
         history["train_loss"].append(avg_train_loss)
@@ -62,8 +61,6 @@ def train_model(
                 outputs = model(features)
                 loss = criterion(outputs, labels)
                 val_loss += loss.item()
-
-                # Calculate validation accuracy for the batch
                 preds = torch.round(torch.sigmoid(outputs))
                 total_val += labels.size(0)
                 correct_val += (preds == labels).sum().item()
@@ -77,6 +74,14 @@ def train_model(
             f"Epoch {epoch + 1}/{epochs} -> Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.4f} | Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.4f}"
         )
 
+        # --- Pruning Logic ---
+        if trial:
+            # Report the validation accuracy to Optuna
+            trial.report(val_accuracy, epoch)
+
+            # Check if the trial should be pruned
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+
     print("Training finished.")
-    # Return both the model and the history of metrics
     return model, history

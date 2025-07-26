@@ -57,7 +57,7 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
     # Set up model parameters
     model_name = tuning_config["model_name"]
     ARCH_PARAMS = {
-        "MLP": {"hidden_size"},
+        "mlp_001": {"hidden_size"},
         "LogisticRegression": {}
     }
     valid_arch_keys = ARCH_PARAMS.get(model_name, set())
@@ -83,33 +83,45 @@ def objective(trial, full_data, tuning_config, sample_fraction, device):
 
     # Train and evaluate the model
     start_time = time.time()
-    trained_model, _ = train_model(
-        model, train_loader, val_loader, criterion, optimiser, hyperparams["epochs"], device
-    )
+    
+    try:
+        trained_model, _ = train_model(
+            model, train_loader, val_loader, criterion, optimiser, hyperparams["epochs"], device, trial
+        )
+    except optuna.TrialPruned:
+        # Re-raise the exception to signal that the trial was pruned
+        raise
+    
     training_time = time.time() - start_time
+    
+    # Store the training time as a user attribute
+    trial.set_user_attr("training_time", training_time)
 
+    # Evaluate on the validation set to get the final AUC for this trial
     trained_model.eval()
     all_scores, all_labels = [], []
     with torch.no_grad():
         for features, labels in val_loader:
-            features, outputs = features.to(device), trained_model(features.to(device))
-            all_scores.extend(torch.sigmoid(outputs).cpu().numpy())
+            features = features.to(device)
+            outputs = trained_model(features)
+            scores = torch.sigmoid(outputs)
+            all_scores.extend(scores.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
     
     auc = roc_auc_score(all_labels, all_scores)
-    return auc, training_time
+    return auc
 
 def main():
     """
-    Main function to run the distributed hyperparameter tuning pipeline.
-    This script's only purpose is to run trials and populate the study database.
+    Main function for a worker to run Optuna trials. This script now uses
+    the n_trials parameter directly for simpler, more robust distributed tuning.
     """
     parser = argparse.ArgumentParser(description="Run distributed hyperparameter tuning.")
     parser.add_argument("--data-config", "-dc", required=True, help="Path to the data config file to sample from.")
     parser.add_argument("--tuning-config", "-tc", required=True, help="Path to the tuning config file with the search space.")
     parser.add_argument("--base-training-config", "-btc", required=True, help="Path to the base training config template.")
     parser.add_argument("--sample-fraction", type=float, default=0.8, help="Fraction of the dataset to use for each tuning trial.")
-    parser.add_argument("--n-trials", type=int, default=50, help="Total number of tuning trials to run across all workers.")
+    parser.add_argument("--n-trials", type=int, default=50, help="Number of tuning trials this worker should attempt to run.")
     args = parser.parse_args()
 
     # --- 1. Load Full Dataset and Configs ---
@@ -125,24 +137,24 @@ def main():
         print(f"Error: Dataset not found at {dataset_filepath}. Please generate it first.")
         return
 
-    # --- 2. Define and Set Up a Resilient Distributed Study ---
-    storage_name = f"sqlite:///reports/{dataset_base_name}_tuning.db"
+    # --- 2. Connect to the Distributed Study ---
     model_name_suffix = Path(args.base_training_config).stem
     study_name = f"{dataset_base_name}_{model_name_suffix}"
-    study = optuna.create_study(
+    storage_name = f"sqlite:///reports/{dataset_base_name}_{model_name_suffix}_tuning.db"
+    
+    study = optuna.load_study(
         study_name=study_name,
         storage=storage_name,
-        directions=["maximize", "minimize"],
-        load_if_exists=True
     )
-    print(f"\nStarting or joining Optuna study '{study_name}' on device: '{device}'")
-    
-    # --- 3. Run Optuna Optimisation ---
+
+    print(f"\nWorker starting on study '{study_name}' on device: '{device}'")
+
+    # --- 3. Run Optuna Optimisation
     study.optimize(
         lambda trial: objective(trial, full_data, tuning_config, args.sample_fraction, device),
-        callbacks=[MaxTrialsCallback(args.n_trials, states=(TrialState.COMPLETE,))]
+        n_trials=args.n_trials,
     )
-    
+
     print(f"\nWorker has finished its trials for study '{study_name}'.")
 
 if __name__ == "__main__":

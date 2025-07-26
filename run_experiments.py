@@ -2,9 +2,12 @@ import yaml
 import argparse
 import subprocess
 import sys
+import time
 from pathlib import Path
-
-from src.data_generator_module.utils import find_project_root
+import optuna
+from tqdm import tqdm
+from optuna.trial import TrialState
+from src.data_generator_module.utils import find_project_root, create_filename_from_config
 
 def prompt_for_data_config(project_root: Path):
     """
@@ -24,7 +27,7 @@ def prompt_for_data_config(project_root: Path):
 
     print("\nPlease select a data configuration to run the tuning job on:")
     for i, path in enumerate(available_configs):
-        print(f"  [{i + 1}] {path.name}")
+        print(f" [{i + 1}] {path.name}")
 
     while True:
         try:
@@ -33,7 +36,7 @@ def prompt_for_data_config(project_root: Path):
             if 0 <= choice_idx < len(available_configs):
                 selected_path = available_configs[choice_idx]
                 print(f"You selected: {selected_path.name}")
-                return selected_path
+                return selected_path.resolve()
             else:
                 print("Invalid number. Please try again.")
         except (ValueError, IndexError):
@@ -44,8 +47,8 @@ def prompt_for_data_config(project_root: Path):
 
 def main():
     """
-    Reads experiments.yml, prompts for a data config, and launches a 
-    parallel tuning job using robust, absolute file paths.
+    Reads experiments.yml, creates the Optuna study, launches parallel
+    tuning jobs, and monitors the overall progress with a progress bar.
     """
     parser = argparse.ArgumentParser(description="Experiment runner for hyperparameter tuning.")
     parser.add_argument("--job", "-j", type=str, required=True, help="The name of the tuning job to run from experiments.yml.")
@@ -61,7 +64,7 @@ def main():
     try:
         with open(experiments_file, "r") as f:
             experiments_config = yaml.safe_load(f)
-            tuning_jobs = experiments_config.get("tuning_jobs", {})
+        tuning_jobs = experiments_config.get("tuning_jobs", {})
     except FileNotFoundError:
         print(f"Error: `{experiments_file}` not found.")
         sys.exit(1)
@@ -71,43 +74,94 @@ def main():
         print(f"Error: Job '{args.job}' not found in `{experiments_file}`.")
         sys.exit(1)
 
-    selected_data_config = prompt_for_data_config(project_root)
-    if not selected_data_config:
+    selected_data_config_path = prompt_for_data_config(project_root)
+    if not selected_data_config_path:
         sys.exit(1)
 
+    # --- Prepare Distributed Study ---
+    print("\n--- Preparing Distributed Study ---")
+    with open(selected_data_config_path, "r") as f:
+        data_config = yaml.safe_load(f)
+    
+    dataset_base_name = create_filename_from_config(data_config)
+    base_training_config_path = project_root / job_params["base_training_config"]
+    
+    # Extract model name suffix from the config filename
+    model_name_suffix = base_training_config_path.stem
+    
+    # Construct study name and storage path, now including the model name
+    study_name = f"{dataset_base_name}_{model_name_suffix}"
+    storage_name = f"sqlite:///reports/{dataset_base_name}_{model_name_suffix}_tuning.db"
+    
+    optuna.create_study(
+        study_name=study_name,
+        storage=storage_name,
+        direction="maximize",
+        load_if_exists=True
+    )
+    print(f"Successfully created or loaded study '{study_name}' in '{storage_name}'")
+
+    # --- Launch Parallel Workers ---
     print(f"\n--- Starting Job: {args.job} ---")
-    print(f"Description: {job_params.get('description', 'N/A')}")
     print(f"Number of parallel workers: {job_params['num_workers']}")
     print("-" * 35)
 
+    # Calculate how many trials each worker should aim for.
+    # The total number of trials will be controlled by the main progress bar loop.
+    n_trials_per_worker = (job_params['n_trials'] + job_params['num_workers'] - 1) // job_params['num_workers']
+
     command = [
         "uv", "run", "run_hyperparameter_tuning.py",
-        "--data-config", str(selected_data_config.resolve()),
+        "--data-config", str(selected_data_config_path),
         "--tuning-config", str((project_root / job_params["tuning_config"]).resolve()),
-        "--base-training-config", str((project_root / job_params["base_training_config"]).resolve()),
+        "--base-training-config", str(base_training_config_path.resolve()),
         "--n-trials", str(job_params["n_trials"]),
         "--sample-fraction", str(job_params["sample_fraction"]),
     ]
 
     workers = []
-    for i in range(job_params["num_workers"]):
-        print(f"Launching worker {i + 1}...")
-        process = subprocess.Popen(command, cwd=project_root)
+    for i in range(job_params['num_workers']):
+        # Redirect worker output to DEVNULL to keep the console clean
+        process = subprocess.Popen(command, cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         workers.append(process)
+    print(f"All {len(workers)} workers launched. Monitoring study progress...")
 
-    print(f"\nAll {len(workers)} workers launched. Waiting for tuning to complete...")
-    for i, worker in enumerate(workers):
-        worker.wait()
-        print(f"Worker {i + 1} has finished (Exit code: {worker.returncode}).")
-    
+    # --- Monitor Progress by Polling the Database ---
+    total_trials = job_params['n_trials']
+    bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+
+    with tqdm(total=total_trials, desc="Overall Tuning Progress", bar_format=bar_format) as pbar:
+        finished_trial_count = 0
+        while finished_trial_count < total_trials:
+            try:
+                study = optuna.load_study(study_name=study_name, storage=storage_name)
+                
+                # Get counts of all trial states
+                all_trials = study.get_trials(deepcopy=False)
+                finished_states = [TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL]
+                current_finished = len([t for t in all_trials if t.state in finished_states])
+
+                # Update progress bar
+                pbar.update(current_finished - finished_trial_count)
+                finished_trial_count = current_finished
+
+                # Break if all workers have exited AND we have the expected number of trials
+                if finished_trial_count >= total_trials and all(p.poll() is not None for p in workers):
+                    break
+                
+                time.sleep(2) # Poll every 2 seconds
+            except Exception as e:
+                print(f"\nError while monitoring study: {e}")
+                time.sleep(5)
+
     print("\n--- All workers have finished. Job complete. ---")
-
+    
     print("\n" + "="*80)
     print("Tuning phase is complete. To analyse the results and select the best trial, run:")
     analysis_command = (
         f"uv run run_tuning_analysis.py "
-        f"-dc {selected_data_config.resolve()} "
-        f"-btc {(project_root / job_params['base_training_config']).resolve()}"
+        f"-dc {selected_data_config_path} "
+        f"-btc {base_training_config_path.resolve()}"
     )
     print(analysis_command)
     print("="*80 + "\n")
