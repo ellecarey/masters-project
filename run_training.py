@@ -102,15 +102,19 @@ def main():
         optimiser,
         mode=scheduler_settings.get('mode', 'min'),
         factor=scheduler_settings.get('factor', 0.1),
-        patience=scheduler_settings.get('patience', 10)
+        patience=scheduler_settings.get('patience', 5)
     )
+
+    early_stopping_settings = train_settings.get("early_stopping_settings", {})
+    patience = early_stopping_settings.get("patience", 10)
 
     trained_model, history = train_model(
         model=model, train_loader=train_loader, validation_loader=val_loader,
         criterion=criterion, optimiser=optimiser, epochs=hyperparams["epochs"], device=device,
         scheduler=scheduler,
         verbose=True,
-        early_stopping_enabled=False
+        early_stopping_enabled=True,
+        patience=patience
     )
 
     # --- Final evaluation on the held-out test set ---

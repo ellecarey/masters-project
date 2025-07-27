@@ -158,11 +158,18 @@ def main():
     )
 
     # --- 7. Print Next Steps ---
-    print("\n--- Next Step: Final Training on Full Dataset ---")
-    print("To train your final model, run the following command:")
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
+    print("Next Step: Choose a final training method:")
+    print("="*80)
+
+    print("\nOPTION 1: Train a single model on this specific dataset")
+    print("-" * 55)
     print(f"uv run run_training.py -dc {args.data_config} -tc {optimal_config_path}")
-    print("=" * 80 + "\n")
+
+    print("\nOPTION 2: Train models on ALL datasets in this family (all seeds)")
+    print("-" * 65)
+    print(f"uv run run_multi_seed_training.py -dcb {args.data_config} -oc {optimal_config_path}")
+    print("\n" + "="*80)
 
 if __name__ == "__main__":
     main()
