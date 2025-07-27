@@ -1,4 +1,5 @@
 model_name: "mlp_001"
+
 search_space:
   hidden_size:
     type: int
@@ -11,5 +12,10 @@ search_space:
     high: 1.0e-2
     log: true
   batch_size:
-    type: categorical
-    choices: [32, 64, 128]
+    type: categorical 
+    choices: [32, 64, 128, 256]
+  epochs:
+    type: int
+    low: 20
+    high: 100
+    step: 10

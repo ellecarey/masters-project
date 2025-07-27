@@ -4,10 +4,14 @@ training_settings:
   model_output_dir: models/
   test_set_ratio: 0.2
   validation_set_ratio: 0.2
-  hyperparameters:
-    hidden_size: 128
-    output_size: 1
-    learning_rate: 0.0026972198113268935
-    epochs: 50
-    batch_size: 64
   model_name: mlp_001
+  scheduler_settings:
+    mode: min
+    factor: 0.1
+    patience: 10
+  hyperparameters:
+    hidden_size: 32
+    output_size: 1
+    learning_rate: 0.0034219701529921626
+    epochs: 20
+    batch_size: 256

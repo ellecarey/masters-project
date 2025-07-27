@@ -19,7 +19,7 @@ from src.training_module.models import get_model
 from src.training_module.dataset import TabularDataset
 from src.training_module.trainer import train_model
 
-def objective(trial, full_data, tuning_config, sample_fraction, device, fixed_epochs):
+def objective(trial, full_data, tuning_config, sample_fraction, device):
     """
     The objective function for Optuna.
     """
@@ -37,7 +37,6 @@ def objective(trial, full_data, tuning_config, sample_fraction, device, fixed_ep
     search_space = tuning_config["search_space"]
     hyperparams = {}
     for param_name, params_config in search_space.items():
-        # This line now works correctly because copy is imported
         params = copy.copy(params_config)
         param_type = params.pop("type")
         if param_type == "int":
@@ -46,7 +45,9 @@ def objective(trial, full_data, tuning_config, sample_fraction, device, fixed_ep
             hyperparams[param_name] = trial.suggest_float(param_name, **params)
         elif param_type == "categorical":
             hyperparams[param_name] = trial.suggest_categorical(param_name, **params)
-
+    
+    epochs_for_this_trial = hyperparams["epochs"]
+    
     # Set up model parameters
     model_name = tuning_config["model_name"]
     ARCH_PARAMS = {"mlp_001": {"hidden_size"}}
@@ -72,7 +73,14 @@ def objective(trial, full_data, tuning_config, sample_fraction, device, fixed_ep
     start_time = time.time()
     try:
         trained_model, _ = train_model(
-            model, train_loader, val_loader, criterion, optimiser, fixed_epochs, device, trial
+            model=model,
+            train_loader=train_loader,
+            validation_loader=val_loader,
+            criterion=criterion,
+            optimiser=optimiser,
+            epochs=epochs_for_this_trial,
+            device=device,
+            trial=trial
         )
     except optuna.TrialPruned:
         raise
@@ -111,10 +119,6 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tuning_config = data_utils.load_yaml_config(args.tuning_config)
     data_config = data_utils.load_yaml_config(args.data_config)
-    
-    # -Load the base training config to get the fixed epochs ---
-    base_training_config = data_utils.load_yaml_config(args.base_training_config)
-    fixed_epochs = base_training_config["training_settings"]["hyperparameters"]["epochs"]
 
     dataset_base_name = data_utils.create_filename_from_config(data_config)
     dataset_filepath = os.path.join("data", f"{dataset_base_name}_dataset.csv")
@@ -139,7 +143,12 @@ def main():
 
     # --- 3. Run Optuna Optimisation
     study.optimize(
-        lambda trial: objective(trial, full_data, tuning_config, args.sample_fraction, device, fixed_epochs),
+        lambda trial: objective(trial, 
+                                full_data, 
+                                tuning_config, 
+                                args.sample_fraction, 
+                                device, 
+                                ),
         n_trials=args.n_trials,
     )
 

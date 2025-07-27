@@ -1,5 +1,3 @@
-# run_training.py
-
 import os
 import argparse
 import pandas as pd
@@ -10,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from pathlib import Path
 import yaml
 import json
+
 from src.data_generator_module import utils as data_utils
 from src.training_module import utils as train_utils
 from src.training_module.models import get_model
@@ -19,7 +18,7 @@ from src.training_module.trainer import train_model
 def main():
     """
     Runs the final training pipeline using Path objects for robust path
-    management and generates a clean experiment name.
+    management. 
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
@@ -39,37 +38,19 @@ def main():
         print(f"Error: Configuration file not found - {e}")
         return
 
-    # --- Construct Final Experiment Name and File Paths using pathlib ---
+    # --- Construct Final Experiment Name and File Paths ---
     train_settings = training_config["training_settings"]
-    
     experiment_name = Path(args.training_config).stem
     print(f"\nRunning experiment: {experiment_name}")
 
-    # Use pathlib for all path definitions
     project_root = Path(data_utils.find_project_root())
     dataset_base_name = data_utils.create_filename_from_config(data_config)
     model_name = train_settings["model_name"]
-    
     output_plot_dir = project_root / "reports" / "figures" / dataset_base_name / f"{model_name}_final"
     output_plot_dir.mkdir(parents=True, exist_ok=True)
-    
     model_output_dir = project_root / train_settings["model_output_dir"]
     model_output_dir.mkdir(parents=True, exist_ok=True)
-    
     model_filepath = model_output_dir / f"{experiment_name}_model.pt"
-
-    # --- Save a copy of the training config for traceability ---
-    output_config_dir = project_root / "configs" / "training" / "generated"
-    output_config_dir.mkdir(parents=True, exist_ok=True)
-    new_config_path = output_config_dir / f"{experiment_name}_config.yml"
-    with open(new_config_path, "w") as f:
-        full_context = {
-            "source_data_config": args.data_config,
-            "source_training_config": args.training_config,
-            "training_settings": training_config["training_settings"],
-        }
-        yaml.dump(full_context, f, default_flow_style=False)
-    print(f"Saved full training context to: {new_config_path}")
 
     # --- Load Data ---
     dataset_filepath = project_root / "data" / f"{dataset_base_name}_dataset.csv"
@@ -83,8 +64,8 @@ def main():
     hyperparams = train_settings["hyperparameters"]
     global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
     data_utils.set_global_seed(global_seed)
-    
-    # ... Data splitting and DataLoader
+
+    # --- Data splitting and DataLoader ---
     target_column = train_settings["target_column"]
     X = data.drop(columns=[target_column])
     y = data[target_column]
@@ -98,28 +79,38 @@ def main():
         X_temp, y_temp, test_size=relative_test_ratio, random_state=global_seed, stratify=y_temp
     )
     print(f"Data split into: {len(X_train)} train, {len(X_val)} validation, {len(X_test)} test samples.")
-
+    
     train_dataset = TabularDataset(X_train, y_train)
     val_dataset = TabularDataset(X_val, y_val)
     test_dataset = TabularDataset(X_test, y_test)
     train_loader = DataLoader(dataset=train_dataset, batch_size=hyperparams["batch_size"], shuffle=True)
     val_loader = DataLoader(dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
-    
-    # ..Model initialisation and training.
+
+    # --- Model initialisation, training, and scheduler creation ---
     ARCH_PARAMS = {"mlp_001": {"hidden_size", "output_size"}}
     valid_arch_keys = ARCH_PARAMS.get(model_name, set())
     model_params = {key: hyperparams[key] for key in hyperparams if key in valid_arch_keys}
     model_params["input_size"] = X_train.shape[1]
+
     model = get_model(model_name, model_params)
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
-    
+
+    scheduler_settings = train_settings.get("scheduler_settings", {})
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimiser,
+        mode=scheduler_settings.get('mode', 'min'),
+        factor=scheduler_settings.get('factor', 0.1),
+        patience=scheduler_settings.get('patience', 10)
+    )
+
     trained_model, history = train_model(
         model=model, train_loader=train_loader, validation_loader=val_loader,
         criterion=criterion, optimiser=optimiser, epochs=hyperparams["epochs"], device=device,
+        scheduler=scheduler,
         verbose=True,
-        early_stopping_enabled=False # Disable early stopping for the final run
+        early_stopping_enabled=False
     )
 
     # --- Final evaluation on the held-out test set ---
@@ -134,16 +125,15 @@ def main():
             test_loss += loss.item()
             all_preds.extend(torch.round(torch.sigmoid(outputs)).cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
-    
+
     avg_test_loss = test_loss / len(test_loader)
-    
     from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
     accuracy = accuracy_score(all_labels, all_preds)
     f1 = f1_score(all_labels, all_preds)
     precision = precision_score(all_labels, all_preds)
     recall = recall_score(all_labels, all_preds)
     final_auc = roc_auc_score(all_labels, all_preds)
-    
+
     print(f"Final Test Loss (BCE): {avg_test_loss:.4f}")
     print(f"Accuracy: {accuracy:.4f}")
     print(f"F1-Score: {f1:.4f}")

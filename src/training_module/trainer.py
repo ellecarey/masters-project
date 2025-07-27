@@ -3,6 +3,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 import optuna
 import copy
+from typing import Optional
 
 def train_model(
     model: torch.nn.Module,
@@ -12,6 +13,7 @@ def train_model(
     optimiser: torch.optim.Optimizer,
     epochs: int,
     device: str,
+    scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None, # Add this line
     trial: optuna.trial.Trial = None,
     verbose: bool = False,
     early_stopping_enabled: bool = True,
@@ -19,7 +21,7 @@ def train_model(
 ):
     """
     Model training function with best model checkpointing and optional early stopping.
-    This version has corrected indentation and is silent by default.
+    This version is silent by default.
     """
     model.to(device)
     history = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []}
@@ -70,9 +72,19 @@ def train_model(
         history["val_loss"].append(avg_val_loss)
         history["val_acc"].append(val_accuracy)
 
-        # Update progress bar postfix if verbose
-        if verbose:
-            epoch_iterator.set_postfix({"Val Loss": f"{avg_val_loss:.4f}", "Val Acc": f"{val_accuracy:.4f}"})
+         # --- Call the scheduler step ---
+        if scheduler:
+            scheduler.step(avg_val_loss) # Add this line
+            if verbose:
+                # Optional: print the current learning rate to monitor the scheduler
+                current_lr = optimiser.param_groups[0]['lr']
+                epoch_iterator.set_postfix({
+                    "Val Loss": f"{avg_val_loss:.4f}", 
+                    "Val Acc": f"{val_accuracy:.4f}",
+                    "LR": f"{current_lr:.6f}"
+                })
+        elif verbose:
+             epoch_iterator.set_postfix({"Val Loss": f"{avg_val_loss:.4f}", "Val Acc": f"{val_accuracy:.4f}"})
 
         # --- Best Model Checkpointing (Always On) ---
         if avg_val_loss < best_val_loss:

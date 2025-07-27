@@ -117,11 +117,13 @@ def main():
     ]
     workers = []
     for i in range(job_params['num_workers']):
+    # uncomment this section for debugging to show the output of one worker
     #      if i == 0:
     #         # Let the first worker print its output to the console
     #         print("Launching worker 1 with output enabled for debugging...")
     #         process = subprocess.Popen(command, cwd=project_root) # No output redirection
-    # else: # fordeubggin purposes
+    # else: 
+    # end of debugging
         process = subprocess.Popen(command, cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         workers.append(process)
     print(f"All {len(workers)} workers launched. Monitoring study progress...")
