@@ -9,6 +9,7 @@ import shutil
 
 from .comparison import compare_families
 from src.utils.filenames import metrics_filename
+from src.utils.report_paths import reports_root
 
 # Ensure the src directory is in the Python path for utils
 try:
@@ -36,7 +37,7 @@ def aggregate(optimal_config: str):
     project_root = Path(find_project_root())
     models_dir = project_root / "models"
     reports_dir = project_root / "reports"
-    spreadsheet_path = reports_dir / "experiment_tracking.xlsx"
+    spreadsheet_path = reports_root() / "experiment_tracking.xlsx"
     
     # --- 1. Identify the Experiment Family ---
     optimal_config_path = Path(optimal_config)

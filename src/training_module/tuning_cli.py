@@ -40,7 +40,7 @@ def run_hyperparameter_tuning(
     # --- Connect to the Optuna Study ---
     model_name_suffix = Path(base_training_config).stem
     study_name = f"{dataset_base_name}_{model_name_suffix}"
-    storage_name = f"sqlite:///reports/{dataset_base_name}_{model_name_suffix}_tuning.db"
+    storage_name = f"sqlite:///db/{study_name}_tuning.db"
     study = optuna.load_study(
         study_name=study_name,
         storage=storage_name,
@@ -327,7 +327,7 @@ def run_tuning_analysis(data_config: str, base_training_config: str):
     dataset_base_name = data_utils.create_filename_from_config(data_config_dict)
     model_name_suffix = base_training_config_path.stem
     study_name = f"{dataset_base_name}_{model_name_suffix}"
-    storage_name = f"sqlite:///reports/{dataset_base_name}_{model_name_suffix}_tuning.db"
+    storage_name = f"sqlite:///db/{study_name}_tuning.db"
     print(f"--- Analysing Study: {study_name} ---")
     print(f"Loading results from: {storage_name}")
 

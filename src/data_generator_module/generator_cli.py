@@ -1,3 +1,9 @@
+import os
+from pathlib import Path
+import pandas as pd
+from src.data_generator_module import utils
+from src.data_generator_module.gaussian_data_generator import GaussianDataGenerator
+
 def generate_from_config(config_path: str, keep_original_name: bool = False):
     """
     Generate a dataset from a YAML config file, with support for
@@ -6,11 +12,6 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
         config_path: Path to your YAML config.
         keep_original_name: If True, retains config filename.
     """
-    import os
-    from pathlib import Path
-    import pandas as pd
-    from src.data_generator_module import utils
-    from src.data_generator_module.gaussian_data_generator import GaussianDataGenerator
 
     # Load configuration and set up reproducibility
     try:
@@ -75,16 +76,16 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
     if "visualisation" in config:
         vis_config = config["visualisation"]
         main_title, subtitle = utils.create_plot_title_from_config(config)
-        base_plot_dir = vis_config.get("save_to_dir", "reports/figures")
-        experiment_plot_dir = os.path.join(base_plot_dir, experiment_name)
-        os.makedirs(experiment_plot_dir, exist_ok=True)
-        feature_wise_plot_path = os.path.join(
-            experiment_plot_dir, f"feature_wise_signal_noise_{experiment_name}.pdf"
-        )
-        generator.visualise_signal_noise_by_features(
-            save_path=feature_wise_plot_path,
-            title=main_title,
-            subtitle=subtitle,
+
+        subfolder = experiment_name
+        
+        # Use family-based path structure
+        from src.utils.report_paths import experiment_family_path
+        feature_wise_plot_path = experiment_family_path(
+            full_experiment_name=experiment_name,
+            art_type="figure",
+            subfolder=subfolder,
+            filename=f"feature_wise_signal_noise_{experiment_name}.pdf"
         )
 
     # Configuration management
@@ -153,7 +154,8 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
     from src.data_generator_module.gaussian_data_generator import GaussianDataGenerator
     from src.data_generator_module.utils import (
         find_project_root,
-        create_filename_from_config
+        create_filename_from_config,
+        create_plot_title_from_config
     )
 
     project_root = Path(find_project_root())
@@ -199,4 +201,27 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
         with open(new_config_path, 'w') as f:
             yaml.dump(perturbed_config, f, default_flow_style=False)
         print(f"Saved new config to: {new_config_path.name}")
-    print("\nMulti-seed perturbation complete.")
+        if "visualisation" in data_config:
+            vis_config = data_config["visualisation"]
+            main_title, subtitle = create_plot_title_from_config(perturbed_config)
+            
+            subfolder = new_filename_base
+            
+            # Use family-based path structure
+            from src.utils.report_paths import experiment_family_path
+            feature_wise_plot_path = experiment_family_path(
+                full_experiment_name=new_filename_base,
+                art_type="figure",
+                subfolder=subfolder,
+                filename=f"feature_wise_signal_noise_{new_filename_base}.pdf"
+            )
+        
+            generator.visualise_signal_noise_by_features(
+                save_path=str(feature_wise_plot_path),
+                title=main_title,
+                subtitle=subtitle,
+            )
+        
+            print(f"Generated visualisation: {feature_wise_plot_path}")
+    
+        print("\nMulti-seed perturbation complete.")

@@ -5,9 +5,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from src.utils.filenames import metrics_filename, model_filename, config_filename, parse_optimal_config_name
 from src.data_generator_module.utils import find_project_root
+from src.utils.report_paths import artefact_path
 
 def compare_families(original_optimal_config, perturbation_tag):
-
     orig_config_path = Path(original_optimal_config)
     # Parse components from filename or config
     dataset_base, model_name, seed, pert_tag = parse_optimal_config_name(orig_config_path)
@@ -26,7 +26,6 @@ def compare_families(original_optimal_config, perturbation_tag):
         for s in seeds
     ]
     
-    import pandas as pd
     orig_metrics = []
     for f in orig_metrics_files:
         if f.exists():
@@ -34,6 +33,7 @@ def compare_families(original_optimal_config, perturbation_tag):
                 row = pd.read_json(fh, typ='series')
                 row['seed'] = int(re.search(r'seed(\d+)', f.stem).group(1))
                 orig_metrics.append(row)
+    
     pert_metrics = []
     for f in pert_metrics_files:
         if f.exists():
@@ -58,24 +58,40 @@ def compare_families(original_optimal_config, perturbation_tag):
     orig_summary = orig_df[metrics].agg(['mean', 'std'])
     pert_summary = pert_df[metrics].agg(['mean', 'std'])
     
-    # Save comparison as CSV
-    reports_dir = Path("reports")
-    reports_dir.mkdir(exist_ok=True)
-    merged.to_csv(reports_dir / f"comparison_{orig_name}_vs_{pert_name}.csv", index=False)
+    # Save comparison as CSV using new report paths system
+    comparison_csv_path = artefact_path(
+        experiment=f"{orig_name}_vs_{pert_name}", 
+        art_type="comparison", 
+        filename=f"comparison_{orig_name}_vs_{pert_name}.csv"
+    )
+    merged.to_csv(comparison_csv_path, index=False)
+    print(f"Comparison data saved to: {comparison_csv_path}")
     
-    # 4. Print summary and plot (optional)
+    # 4. Print summary and plot
     print("\nComparison table:")
     print(merged.to_string(index=False))
     print("\nSummary (mean/std):")
     print(merged[[f'{m}_delta' for m in metrics]].agg(['mean', 'std']))
 
+    # Generate comparison plots using new system
     for m in metrics:
         means = [orig_summary.loc['mean', m], pert_summary.loc['mean', m]]
-        stds = [orig_summary.loc['std', m],  pert_summary.loc['std', m]]
+        stds = [orig_summary.loc['std', m], pert_summary.loc['std', m]]
+        
         plt.figure()
         plt.bar(['Original', 'Perturbed'], means, yerr=stds, capsize=4)
         plt.title(f'{m}: Original vs Perturbed')
         plt.ylabel(m)
         plt.tight_layout()
-        plt.savefig(reports_dir / f"{orig_name}_vs_{pert_name}_{m}.pdf")
+        
+        # Save using new report paths system
+        plot_path = artefact_path(
+            experiment=f"{orig_name}_vs_{pert_name}",
+            art_type="comparison", 
+            filename=f"{orig_name}_vs_{pert_name}_{m}.pdf"
+        )
+        plt.savefig(plot_path)
         plt.close()
+        print(f"Saved comparison plot: {plot_path}")
+
+    print(f"\nAll comparison artifacts saved under: {reports_root() / 'comparisons' / f'{orig_name}_vs_{pert_name}'}")
