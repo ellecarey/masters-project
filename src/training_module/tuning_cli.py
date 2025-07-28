@@ -200,7 +200,7 @@ def run_experiments(job: str):
     model_name_suffix = base_training_config_path.stem
 
     study_name = f"{dataset_base_name}_{model_name_suffix}"
-    storage_name = f"sqlite:///reports/{dataset_base_name}_{model_name_suffix}_tuning.db"
+    storage_name = f"sqlite:///db/{study_name}_tuning.db"
 
     optuna.create_study(
         study_name=study_name,
@@ -369,7 +369,13 @@ def run_tuning_analysis(data_config: str, base_training_config: str):
 
     # --- Visualisations ---
     model_name = tuning_config.get("model_name", "model")
-    output_plot_dir = project_root / "reports" / "figures" / dataset_base_name / model_name
+
+    # Extract family base from dataset_base_name (remove _seed\d+)
+    from src.utils.report_paths import extract_family_base
+    family_base = extract_family_base(dataset_base_name)
+    
+    # Create tuning-specific directory at family level
+    output_plot_dir = project_root / "reports" / "figures" / family_base / f"{model_name}_tuning"
     os.makedirs(output_plot_dir, exist_ok=True)
     print(f"\nSaving plots to: {output_plot_dir}")
     plt.figure()
