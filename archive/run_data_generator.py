@@ -1,10 +1,3 @@
-"""
-Data generation pipeline for feature-based signal vs noise classification.
-
-This script generates datasets where samples are classified based on
-feature combinations without creating intermediate observation features.
-"""
-
 import os
 import argparse
 from src.data_generator_module import GaussianDataGenerator, utils
@@ -65,7 +58,7 @@ def main():
     experiment_name = create_filename_from_config(config)
     print(f"Generated experiment name: {experiment_name}")
 
-    # Initialize the data generator
+    # Initialise the data generator
     dataset_settings = config["dataset_settings"]
     generator = GaussianDataGenerator(
         n_samples=dataset_settings["n_samples"],
@@ -87,7 +80,17 @@ def main():
                 "store_for_visualisation", False
             ),
         )
-
+        
+    if "perturbation_settings" in config:
+        print("\nApplying perturbations...")
+        perturbations = config["perturbation_settings"]
+        for p_config in perturbations:
+            generator.perturb_feature(
+                feature_name=p_config['feature'],
+                class_label=p_config['class_label'],
+                sigma_shift=p_config['sigma_shift']
+            )
+            
     # Step 3: Save the generated dataset
     output_settings = config.get("output_settings", {"data_dir": "data/"})
     output_data_dir = output_settings.get("data_dir", "data/")

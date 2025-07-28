@@ -371,3 +371,58 @@ class GaussianDataGenerator:
         print(f"Feature types: {self.feature_types}")
         print("\nSummary statistics:")
         return self.data.describe()
+
+    def perturb_feature(self, feature_name: str, class_label: int, sigma_shift: float):
+        """
+        Perturbs a specific feature for a given class (signal or noise) by a
+        multiple of its standard deviation.
+    
+        Parameters:
+        -----------
+        feature_name : str
+            The name of the feature to perturb (e.g., 'feature_4').
+        class_label : int
+            The class to apply the perturbation to (1 for signal, 0 for noise).
+        sigma_shift : float
+            The amount to shift the feature's mean, in multiples of its standard deviation.
+            For example, a value of 1.0 shifts by +1 sigma.
+        """
+        if self.data is None:
+            raise ValueError("Data has not been generated yet. Call a generation method first.")
+    
+        if feature_name not in self.data.columns:
+            raise ValueError(f"Feature '{feature_name}' not found in the dataset.")
+    
+        # Determine which feature parameters to use (signal or noise)
+        if class_label == 1:
+            feature_params = self.feature_based_metadata['signal_features'].get(feature_name)
+            class_name = "Signal"
+        elif class_label == 0:
+            feature_params = self.feature_based_metadata['noise_features'].get(feature_name)
+            class_name = "Noise"
+        else:
+            raise ValueError("class_label must be 0 (noise) or 1 (signal).")
+    
+        if not feature_params:
+            raise ValueError(f"Could not find original generation parameters for '{feature_name}' and class '{class_name}'.")
+    
+        original_std = feature_params['std']
+        shift_amount = original_std * sigma_shift
+    
+        # Apply the shift only to the specified class
+        class_indices = self.data['target'] == class_label
+        self.data.loc[class_indices, feature_name] += shift_amount
+    
+        print(f"Perturbed '{feature_name}' for {class_name} class by {sigma_shift} sigma ({shift_amount:.4f}).")
+    
+        # Store metadata about the perturbation
+        if 'perturbations' not in self.feature_based_metadata:
+            self.feature_based_metadata['perturbations'] = []
+        
+        self.feature_based_metadata['perturbations'].append({
+            'feature': feature_name,
+            'class': class_name,
+            'sigma_shift': sigma_shift
+        })
+    
+        return self
