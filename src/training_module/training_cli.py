@@ -47,8 +47,7 @@ def train_single_config(data_config_path: str, training_config_path: str):
     print(f"\nRunning experiment: {exp_name}")
 
     project_root = Path(data_utils.find_project_root())
-    output_plot_dir = project_root / "reports" / "figures" / full_base / f"{model_name}_final"
-    output_plot_dir.mkdir(parents=True, exist_ok=True)
+    output_plot_dir = Path("placeholder")
     model_output_dir = project_root / train_settings["model_output_dir"]
     model_output_dir.mkdir(parents=True, exist_ok=True)
     model_filepath = model_output_dir / model_filename(base, model_name, seed=seed, perturbation_tag=pert_tag)
@@ -161,12 +160,13 @@ def train_single_config(data_config_path: str, training_config_path: str):
     print("\n--- Generating Final Evaluation Plots ---")
     train_utils.plot_training_history(
         history=history,
-        experiment_name=f"{model_name} on {full_base}",
+        experiment_name=exp_name,  # Use clean experiment name
         output_dir=output_plot_dir
     )
+    
     train_utils.plot_final_metrics(
         model=trained_model, test_loader=test_loader, device=device,
-        experiment_name=f"{model_name} on {full_base}",
+        experiment_name=exp_name,  # Use clean experiment name  
         output_dir=output_plot_dir
     )
 

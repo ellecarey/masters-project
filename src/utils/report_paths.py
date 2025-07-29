@@ -59,6 +59,11 @@ def experiment_family_path(
 
 def extract_family_base(experiment_name: str) -> str:
     """Extract the base family name from a full experiment name."""
-    # Remove _seed\d+ or _pert.* suffixes to get family base
-    base = re.sub(r'_(seed\d+|pert.*)', '', experiment_name)
+    import re
+    print(f"DEBUG: Input experiment_name = {experiment_name}")
+    
+    # Remove everything from _seed onwards, OR everything from _pert onwards, OR everything from _mlp onwards
+    base = re.sub(r'_(?:seed\d+|pert_|mlp_).*$', '', experiment_name)
+    
+    print(f"DEBUG: Extracted family_base = {base}")
     return base

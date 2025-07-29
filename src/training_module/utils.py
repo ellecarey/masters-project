@@ -11,7 +11,7 @@ import seaborn as sns
 import torch
 import numpy as np
 from sklearn.metrics import confusion_matrix, roc_curve, auc
-from src.utils.report_paths import artefact_path
+from src.utils.report_paths import artefact_path, experiment_family_path, extract_family_base
 
 def find_project_root():
     """Find the project root by searching upwards for a marker file."""
@@ -228,7 +228,19 @@ def plot_training_history(history, experiment_name, output_dir):
     ax2.grid(True, linestyle='--', alpha=0.6)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    save_path = artefact_path(experiment_name, "figure", "training_history.pdf")
+    
+    
+    # Extract family base and create subfolder
+    family_base = extract_family_base(experiment_name)
+    subfolder = f"{experiment_name}_final"
+    
+    save_path = experiment_family_path(
+        full_experiment_name=experiment_name,
+        art_type="figure",
+        subfolder=subfolder,
+        filename="training_history.pdf"
+    )
+    
     plt.savefig(save_path)
     plt.close()
     print(f"Saved training history plot to: {save_path}")
@@ -259,7 +271,16 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     plt.title(f'Confusion Matrix for {experiment_name}')
     plt.ylabel('Actual Class')
     plt.xlabel('Predicted Class')
-    cm_save_path = artefact_path(experiment_name, "figure", "confusion_matrix.pdf")
+    family_base = extract_family_base(experiment_name)
+    subfolder = f"{experiment_name}_final"
+    
+    # Save confusion matrix
+    cm_save_path = experiment_family_path(
+        full_experiment_name=experiment_name,
+        art_type="figure",
+        subfolder=subfolder,
+        filename="confusion_matrix.pdf"
+    )
     plt.savefig(cm_save_path, bbox_inches='tight')
     plt.close()
     print(f"\nSaved confusion matrix to: {cm_save_path}")
@@ -276,7 +297,12 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     plt.ylabel('True Positive Rate')
     plt.title(f'Receiver Operating Characteristic (ROC)\n({experiment_name})')
     plt.legend(loc="lower right")
-    roc_save_path = artefact_path(experiment_name, "figure", "roc_curve.pdf")
+    roc_save_path = experiment_family_path(
+        full_experiment_name=experiment_name,
+        art_type="figure",
+        subfolder=subfolder,
+        filename="roc_curve.pdf"
+    )
     plt.savefig(roc_save_path, bbox_inches='tight')
     plt.close()
     print(f"Saved ROC curve to: {roc_save_path}")
