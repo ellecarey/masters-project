@@ -2,12 +2,17 @@ from .aggregation import aggregate_family_results
 import pandas as pd
 import re
 from pathlib import Path
+import numpy as np
 import matplotlib.pyplot as plt
 from src.utils.filenames import metrics_filename, model_filename, config_filename, parse_optimal_config_name
 from src.data_generator_module.utils import find_project_root
+from src.data_generator_module.plotting_style import apply_custom_plot_style
 from src.utils.report_paths import artefact_path, reports_root
+from src.utils.plotting_helpers import bounded_yerr, calculate_adaptive_ylimits, add_smart_value_labels, add_single_series_labels, format_plot_title
+
 
 def compare_families(original_optimal_config, perturbation_tag):
+    apply_custom_plot_style()
     orig_config_path = Path(original_optimal_config)
     # Parse components from filename or config
     dataset_base, model_name, seed, pert_tag = parse_optimal_config_name(orig_config_path)
@@ -51,7 +56,11 @@ def compare_families(original_optimal_config, perturbation_tag):
 
     # 3. Merge and compare by seed
     merged = pd.merge(orig_df, pert_df, on='seed', suffixes=('_orig', '_pert'))
-    metrics = ['Accuracy', 'AUC', 'F1-Score']
+    
+    # Include all metrics except Test Loss (BCE) ***
+    all_metrics = [col for col in orig_df.columns if col not in ['seed', 'Test Loss (BCE)']]
+    metrics = all_metrics  # Now includes: Accuracy, F1-Score, Precision, Recall, AUC
+    
     for m in metrics:
         merged[f'{m}_delta'] = merged[f"{m}_pert"] - merged[f"{m}_orig"]
     
@@ -60,8 +69,8 @@ def compare_families(original_optimal_config, perturbation_tag):
     
     # Save comparison as CSV using new report paths system
     comparison_csv_path = artefact_path(
-        experiment=f"{orig_name}_vs_{pert_name}", 
-        art_type="comparison", 
+        experiment=f"{orig_name}_vs_{pert_name}",
+        art_type="comparison",
         filename=f"comparison_{orig_name}_vs_{pert_name}.csv"
     )
     merged.to_csv(comparison_csv_path, index=False)
@@ -73,56 +82,76 @@ def compare_families(original_optimal_config, perturbation_tag):
     print("\nSummary (mean/std):")
     print(merged[[f'{m}_delta' for m in metrics]].agg(['mean', 'std']))
 
-    # Generate single line plot comparison (similar to training history)
-    orig_summary = orig_df[metrics].agg(['mean', 'std'])
-    pert_summary = pert_df[metrics].agg(['mean', 'std'])
-    
-    # Create figure with similar style to training history
-    plt.figure(figsize=(12, 8))
+    # Generate single line plot comparison 
+    plt.figure()
     
     # X-axis positions for metrics
     x_pos = range(len(metrics))
     
+    all_means = np.concatenate([orig_summary.loc['mean'].values, 
+                               pert_summary.loc['mean'].values])
+    all_stds = np.concatenate([orig_summary.loc['std'].values, 
+                              pert_summary.loc['std'].values])
+    
+    # Calculate tighter, more appropriate y-limits for high-performing metrics
+    data_min = np.min(all_means - all_stds)
+    data_max = np.max(all_means + all_stds)
+    
+    # For metrics clustered near 1.0, use a much tighter range
+    if data_min > 0.9:  # High-performing metrics
+        y_min = max(0.9, data_min - 0.01)  # Small padding
+        y_max = min(1.02, data_max + 0.01)  # Small padding, cap at 1.02
+    else:
+        # Use adaptive limits for wider ranges
+        y_min, y_max = calculate_adaptive_ylimits(all_means, all_stds)
+    
     # Plot lines for original and perturbed results
-    plt.errorbar(x_pos, orig_summary.loc['mean'], yerr=orig_summary.loc['std'], 
-                 marker='o', linewidth=2, capsize=5, capthick=2, 
+    orig_yerr = bounded_yerr(orig_summary.loc['mean'].values,
+                            orig_summary.loc['std'].values)
+    
+    pert_yerr = bounded_yerr(pert_summary.loc['mean'].values,
+                            pert_summary.loc['std'].values)
+    
+    plt.errorbar(x_pos, orig_summary.loc['mean'], yerr=orig_yerr,
+                 marker='o', linewidth=2, capsize=5, capthick=2,
                  label='Original', color='blue', markersize=8)
     
-    plt.errorbar(x_pos, pert_summary.loc['mean'], yerr=pert_summary.loc['std'], 
-                 marker='s', linewidth=2, capsize=5, capthick=2, 
+    plt.errorbar(x_pos, pert_summary.loc['mean'], yerr=pert_yerr,
+                 marker='s', linewidth=2, capsize=5, capthick=2,
                  label='Perturbed', color='red', markersize=8)
     
     # Customize the plot
-    plt.title(f'Performance Comparison: Original vs Perturbed\n({orig_name} vs {pert_name})', 
-              fontsize=16, fontweight='bold')
-    plt.xlabel('Metrics', fontsize=14)
-    plt.ylabel('Score', fontsize=14)
-    plt.xticks(x_pos, metrics, fontsize=12)
-    plt.yticks(fontsize=12)
+    comp_title = format_plot_title("Performance Comparison: Original vs Perturbed", f"{orig_name} vs {pert_name}")
+    plt.title(comp_title)
+    plt.xlabel('Metrics')
+    plt.ylabel('Score')
+    plt.xticks(x_pos, metrics, rotation=45, ha='right')  
+    plt.yticks()
     
     # Add grid and legend
     plt.grid(True, linestyle='--', alpha=0.7)
-    plt.legend(fontsize=12, loc='best')
+    plt.legend(loc='best')
     
-    # Add value labels on points
-    for i, metric in enumerate(metrics):
-        orig_val = orig_summary.loc['mean', metric]
-        pert_val = pert_summary.loc['mean', metric]
-        
-        # Add labels above the points
-        plt.annotate(f'{orig_val:.4f}', 
-                    (i, orig_val), 
-                    textcoords="offset points", 
-                    xytext=(0,10), 
-                    ha='center', fontsize=10, color='blue')
-        
-        plt.annotate(f'{pert_val:.4f}', 
-                    (i, pert_val), 
-                    textcoords="offset points", 
-                    xytext=(0,-15), 
-                    ha='center', fontsize=10, color='red')
+    # Prepare label data
+    orig_values = orig_summary.loc['mean'].values
+    pert_values = pert_summary.loc['mean'].values
+    orig_labels = [f'{val:.3f}' for val in orig_values]
+    pert_labels = [f'{val:.3f}' for val in pert_values]
     
-    # Adjust layout and save
+    # Add smart labels
+    add_smart_value_labels(
+        x_positions=x_pos,
+        values1=orig_values,
+        values2=pert_values,
+        labels1_text=orig_labels,
+        labels2_text=pert_labels,
+        color1='blue',
+        color2='red',
+    )
+        
+        # Set the y-limits AFTER all plot elements
+    plt.ylim(y_min, y_max)
+        
     plt.tight_layout()
     
     # Save using the new report paths system
@@ -132,34 +161,45 @@ def compare_families(original_optimal_config, perturbation_tag):
         filename=f"{orig_name}_vs_{pert_name}_metrics_comparison.pdf"
     )
     
-    plt.savefig(comparison_plot_path, dpi=300, bbox_inches='tight')
+    plt.savefig(comparison_plot_path, bbox_inches='tight')
     plt.close()
     print(f"Saved comparison line plot: {comparison_plot_path}")
 
-    # Optional: Create a second plot showing the deltas (differences)
     deltas_mean = merged[[f'{m}_delta' for m in metrics]].mean()
     deltas_std = merged[[f'{m}_delta' for m in metrics]].std()
     
-    plt.figure(figsize=(10, 6))
-    plt.errorbar(x_pos, deltas_mean, yerr=deltas_std, 
-                 marker='o', linewidth=2, capsize=5, capthick=2, 
-                 color='green', markersize=8)
+    # Calculate adaptive limits for deltas 
+    delta_min = np.min(deltas_mean - deltas_std)
+    delta_max = np.max(deltas_mean + deltas_std)
+    delta_range = delta_max - delta_min
+    padding = delta_range * 0.1
     
+    y_min_delta = delta_min - padding
+    y_max_delta = delta_max + padding
+    
+    plt.figure()  
+    plt.errorbar(x_pos, deltas_mean, yerr=deltas_std,
+                 marker='o', linewidth=2, capsize=5, capthick=2,
+                 color='green', markersize=8)
+        
     plt.axhline(y=0, color='black', linestyle='-', alpha=0.5)
-    plt.title(f'Performance Difference (Perturbed - Original)\n({orig_name} vs {pert_name})', 
-              fontsize=16, fontweight='bold')
-    plt.xlabel('Metrics', fontsize=14)
-    plt.ylabel('Difference in Score', fontsize=14)
-    plt.xticks(x_pos, metrics, fontsize=12)
+    plt.ylim(y_min_delta, y_max_delta)
+
+    delta_title = format_plot_title("Performance Difference (Perturbed - Original)", f"{orig_name} vs {pert_name}")
+    plt.title(delta_title)
+    plt.xlabel('Metrics')
+    plt.ylabel('Difference in Score')
+    plt.xticks(x_pos, metrics, rotation=45, ha='right')  
     plt.grid(True, linestyle='--', alpha=0.7)
     
     # Add value labels
-    for i, (metric, delta) in enumerate(zip(metrics, deltas_mean)):
-        plt.annotate(f'{delta:.4f}', 
-                    (i, delta), 
-                    textcoords="offset points", 
-                    xytext=(0,10 if delta >= 0 else -15), 
-                    ha='center', fontsize=10, color='green')
+    delta_labels = [f'{val:.3f}' for val in deltas_mean]
+    add_single_series_labels(
+        x_positions=x_pos,
+        values=deltas_mean,
+        labels_text=delta_labels,
+        color='green',
+    )
     
     plt.tight_layout()
     
@@ -170,7 +210,7 @@ def compare_families(original_optimal_config, perturbation_tag):
         filename=f"{orig_name}_vs_{pert_name}_delta_comparison.pdf"
     )
     
-    plt.savefig(delta_plot_path, dpi=300, bbox_inches='tight')
+    plt.savefig(delta_plot_path, bbox_inches='tight')
     plt.close()
     print(f"Saved delta comparison plot: {delta_plot_path}")
 

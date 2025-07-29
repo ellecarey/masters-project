@@ -7,11 +7,14 @@ import openpyxl
 import matplotlib.pyplot as plt
 import shutil
 import re
+import numpy as np
 
 from .comparison import compare_families
 from src.utils.filenames import metrics_filename
 from src.utils.report_paths import reports_root, extract_family_base, experiment_family_path
 from src.data_generator_module import utils as data_utils
+from src.data_generator_module.plotting_style import apply_custom_plot_style
+from src.utils.plotting_helpers import bounded_yerr, calculate_adaptive_ylimits, add_single_series_labels, format_plot_title, apply_decimal_formatters
 
 # Ensure the src directory is in the Python path for utils
 try:
@@ -194,32 +197,38 @@ def aggregate(optimal_config: str):
     
     # Plot 1: Main metrics
     main_metrics_df = plot_data[plot_data['Metric'] != 'Test Loss (BCE)']
+
+    yerr = bounded_yerr(main_metrics_df['mean'].values,
+                     main_metrics_df['std'].values)
     
-    plt.errorbar(main_metrics_df['Metric'], main_metrics_df['mean'], yerr=main_metrics_df['std'], fmt='-o', capsize=5, label='Mean ± Std Dev')
+    plt.errorbar(
+        main_metrics_df['Metric'],
+        main_metrics_df['mean'],
+        yerr=yerr,
+        fmt='-o', capsize=5, label='Mean ± Std Dev')
     
-    for _, row in main_metrics_df.iterrows():
-        plt.text(
-            row['Metric'],
-            row['mean'],
-            f" {row['mean']:.4f} ",
-            ha='center',
-            va='bottom',
-            fontsize=10,
-            fontweight='bold',
-            bbox=dict(facecolor='white', alpha=0.6, edgecolor='none', pad=1)
-        )
+    value_labels = [f'{val:.3f}' for val in main_metrics_df['mean'].values]
+    add_single_series_labels(
+        x_positions=range(len(main_metrics_df)),
+        values=main_metrics_df['mean'].values,
+        labels_text=value_labels,
+        color='black'
+    )
     
-    plt.title(f'Aggregated Performance Metrics\n({base_experiment_name})', fontsize=16)
+    title = format_plot_title("Aggregated Performance Metrics for", base_experiment_name)
+    plt.title(title)
     plt.ylabel('Score')
     plt.xlabel('Metric')
     plt.xticks(rotation=45, ha="right")
     
     # Adjust y-axis limits to give labels space
-    min_y = main_metrics_df['mean'].min() - main_metrics_df['std'].max() * 2
-    max_y = main_metrics_df['mean'].max() + main_metrics_df['std'].max() * 2
-    plt.ylim(min_y, max_y)
+    y_min, y_max = calculate_adaptive_ylimits(
+        main_metrics_df['mean'].values, 
+        main_metrics_df['std'].values
+    )
     
     plt.grid(True, linestyle='--', alpha=0.7)
+    apply_decimal_formatters(plt.gca(), precision=3)
     plt.tight_layout()
     
     # Save using family-based structure
@@ -242,12 +251,8 @@ def aggregate_all_families(optimal_config: str):
     Aggregate both the original and all detected perturbed experiment families
     sharing the same base as the given optimal config, fully automatically.
     """
-    from .aggregation import aggregate_family_results
-    from .analysis_cli import aggregate  # To use your printing/plotting logic
-
     # Setup
     orig_opt_path = Path(optimal_config)
-    from src.data_generator_module.utils import find_project_root
     project_root = Path(find_project_root())
     models_dir = project_root / "models"
 
@@ -255,7 +260,6 @@ def aggregate_all_families(optimal_config: str):
     #   E.g. base = n1000_f_init5_cont0_disc5_sep5p1
     orig_base = orig_opt_path.stem  # e.g. n1000_f_init5_cont0_disc5_sep5p1_seed0_mlp_001_optimal
     # Remove _seedX_mlp_001_optimal if present
-    import re
     base_prefix = re.sub(r'_seed\d+_mlp_001_optimal$', '', orig_base)
 
     print(f"Scanning for experiment families with base: {base_prefix}")

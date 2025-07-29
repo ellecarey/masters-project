@@ -1,21 +1,24 @@
+import torch
+import pandas as pd
+import json
+from pathlib import Path
+from sklearn.model_selection import train_test_split
+import torch.nn as nn
+import re
+from src.data_generator_module import utils as data_utils
+from src.data_generator_module.plotting_style import apply_custom_plot_style
+from src.training_module import utils as train_utils
+from src.training_module.models import get_model
+from src.training_module.dataset import TabularDataset
+from src.training_module.trainer import train_model
+
+from src.utils.filenames import experiment_name, metrics_filename, model_filename
+
 def train_single_config(data_config_path: str, training_config_path: str):
     """
     Train a model on a single data/training config pair.
     """
-    import torch
-    import pandas as pd
-    import json
-    from pathlib import Path
-    from src.data_generator_module import utils as data_utils
-    from src.training_module import utils as train_utils
-    from src.training_module.models import get_model
-    from src.training_module.dataset import TabularDataset
-    from src.training_module.trainer import train_model
-    from sklearn.model_selection import train_test_split
-    import torch.nn as nn
-    import re
-    from src.utils.filenames import experiment_name, metrics_filename, model_filename
-
+    apply_custom_plot_style()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 

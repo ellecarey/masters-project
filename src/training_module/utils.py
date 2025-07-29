@@ -1,7 +1,3 @@
-"""
-Utility functions for the data generator module.
-"""
-
 import os
 import shutil
 from pathlib import Path
@@ -13,6 +9,7 @@ import numpy as np
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 from src.utils.report_paths import artefact_path, experiment_family_path, extract_family_base
 import re
+from src.utils.plotting_helpers import format_plot_title, apply_decimal_formatters
 
 def find_project_root():
     """Find the project root by searching upwards for a marker file."""
@@ -208,8 +205,11 @@ def plot_training_history(history, experiment_name, output_dir):
     saving the result to the specified output directory.
     """
     epochs = range(1, len(history['train_loss']) + 1)
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
-    fig.suptitle(f'Training History for {experiment_name}', fontsize=16)
+    
+    # The figsize and suptitle fontsize arguments are removed to inherit from rcParams.
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True)
+    title = format_plot_title("Training History for", experiment_name)
+    fig.suptitle(title)
 
     # Plot Loss
     ax1.plot(epochs, history['train_loss'], 'o-', label='Training Loss')
@@ -227,7 +227,8 @@ def plot_training_history(history, experiment_name, output_dir):
     ax2.set_title('Model Accuracy Over Epochs')
     ax2.legend()
     ax2.grid(True, linestyle='--', alpha=0.6)
-
+    apply_decimal_formatters(ax1, precision=3)
+    apply_decimal_formatters(ax2, precision=3)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     
     
@@ -277,10 +278,11 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
 
     # Plot Confusion Matrix
     cm = confusion_matrix(all_labels, all_preds)
-    plt.figure(figsize=(8, 6))
+    plt.figure()
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=['Noise', 'Signal'], yticklabels=['Noise', 'Signal'])
-    plt.title(f'Confusion Matrix for {experiment_name}')
+    cm_title = format_plot_title("Confusion Matrix for", experiment_name, sub_width=60)
+    plt.title(cm_title)
     plt.ylabel('Actual Class')
     plt.xlabel('Predicted Class')
     family_base = extract_family_base(experiment_name)
@@ -314,14 +316,15 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     # Plot ROC Curve
     fpr, tpr, _ = roc_curve(all_labels, all_scores)
     roc_auc = auc(fpr, tpr)
-    plt.figure(figsize=(8, 6))
+    plt.figure()
     plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.4f})')
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title(f'Receiver Operating Characteristic (ROC)\n({experiment_name})')
+    roc_title = format_plot_title("Receiver Operating Characteristic (ROC)", experiment_name, sub_width=60)
+    plt.title(roc_title)
     plt.legend(loc="lower right")
     # Save ROC curve
     roc_save_path = experiment_family_path(
