@@ -6,10 +6,12 @@ import sys
 import openpyxl
 import matplotlib.pyplot as plt
 import shutil
+import re
 
 from .comparison import compare_families
 from src.utils.filenames import metrics_filename
-from src.utils.report_paths import reports_root
+from src.utils.report_paths import reports_root, extract_family_base, experiment_family_path
+from src.data_generator_module import utils as data_utils
 
 # Ensure the src directory is in the Python path for utils
 try:
@@ -20,6 +22,7 @@ except ImportError:
     from src.data_generator_module.utils import find_project_root
     from src.data_generator_module.plotting_style import apply_custom_plot_style
 
+    
 def find_experiment_family(models_dir: Path, base_experiment_name: str):
     """
     Finds all metric files belonging to a specific experiment family.
@@ -27,6 +30,42 @@ def find_experiment_family(models_dir: Path, base_experiment_name: str):
     pattern = f"{base_experiment_name.rsplit('_seed', 1)[0]}*_metrics.json"
     metric_files = list(models_dir.glob(pattern))
     return metric_files
+    
+def extract_experiment_characteristics(experiment_name: str, data_config: dict) -> dict:
+    """Extract key characteristics from experiment name and config for tracking."""
+    
+    # Extract from data config
+    dataset_settings = data_config.get("dataset_settings", {})
+    class_config = data_config.get("create_feature_based_signal_noise_classification", {})
+    
+    n_samples = dataset_settings.get("n_samples", 0)
+    n_features = dataset_settings.get("n_initial_features", 0)
+    
+    # Count feature types
+    feature_types = class_config.get("feature_types", {})
+    continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
+    discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
+    
+    # Calculate separation
+    signal_features = class_config.get("signal_features", {})
+    noise_features = class_config.get("noise_features", {})
+    separations = [
+        abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0))
+        for f in signal_features if f in noise_features
+    ]
+    avg_separation = round(sum(separations) / len(separations), 2) if separations else 0.0
+    
+    # Determine if perturbed
+    perturbation = "perturbed" if "_pert_" in experiment_name else "original"
+    
+    return {
+        'n_samples': n_samples,
+        'n_features': n_features,
+        'continuous': continuous_count,
+        'discrete': discrete_count,
+        'separation': avg_separation,
+        'perturbation': perturbation
+    }
 
 def aggregate(optimal_config: str):
     """
@@ -36,8 +75,6 @@ def aggregate(optimal_config: str):
     apply_custom_plot_style()
     project_root = Path(find_project_root())
     models_dir = project_root / "models"
-    reports_dir = project_root / "reports"
-    spreadsheet_path = reports_root() / "experiment_tracking.xlsx"
     
     # --- 1. Identify the Experiment Family ---
     optimal_config_path = Path(optimal_config)
@@ -82,40 +119,96 @@ def aggregate(optimal_config: str):
     print("\n--- Summary Statistics (Mean & Std Dev) ---")
     print(summary_stats)
     
-    # --- 4. Save to Spreadsheet ---
-    sheet_name = f"{base_experiment_name}_summary"
-    print(f"\nSaving aggregated results to sheet '{sheet_name[:31]}' in '{spreadsheet_path}'...")
-    
+    # --- 4. Save to Global Experiment Tracking Spreadsheet ---
     try:
-        with pd.ExcelWriter(spreadsheet_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-            results_df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
-            summary_stats.to_excel(writer, sheet_name=sheet_name[:31], startrow=len(results_df) + 2)
-        print("Successfully saved results to spreadsheet.")
+        # Load the corresponding data config to extract characteristics
+        base_config_name = base_experiment_name.replace('_mlp_001_optimal', '')
+        data_config_path = project_root / "configs" / "data_generation" / f"{base_config_name}_config.yml"
+        
+        if data_config_path.exists():
+            from src.data_generator_module import utils as data_utils
+            data_config_dict = data_utils.load_yaml_config(data_config_path)
+            
+            # Extract experiment characteristics
+            experiment_characteristics = extract_experiment_characteristics(base_experiment_name, data_config_dict)
+            
+            # Create a single row for this experiment
+            experiment_row = {
+                'experiment_family': base_experiment_name,
+                'n_samples': experiment_characteristics['n_samples'],
+                'n_features': experiment_characteristics['n_features'], 
+                'continuous': experiment_characteristics['continuous'],
+                'discrete': experiment_characteristics['discrete'],
+                'separation': experiment_characteristics['separation'],
+                'perturbation': experiment_characteristics['perturbation'],
+            }
+            
+            # Add aggregated metrics (mean and std for each metric)
+            for metric in ['Test Loss (BCE)', 'Accuracy', 'F1-Score', 'Precision', 'Recall', 'AUC']:
+                if metric in summary_stats.index:
+                    experiment_row[f'{metric}_mean'] = summary_stats.loc[metric, 'mean']
+                    experiment_row[f'{metric}_std'] = summary_stats.loc[metric, 'std']
+            
+            # Global tracking spreadsheet path
+            global_spreadsheet_path = reports_root() / "experiment_tracking_master.xlsx"
+            
+            # Ensure the reports directory exists
+            global_spreadsheet_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                # Load existing data or create new DataFrame
+                if global_spreadsheet_path.exists():
+                    existing_df = pd.read_excel(global_spreadsheet_path, sheet_name='Master_Tracking')
+                    # Remove existing row for this experiment if it exists
+                    existing_df = existing_df[existing_df['experiment_family'] != base_experiment_name]
+                    # Add the new row
+                    updated_df = pd.concat([existing_df, pd.DataFrame([experiment_row])], ignore_index=True)
+                else:
+                    updated_df = pd.DataFrame([experiment_row])
+                
+                # Sort by experiment family name for consistent ordering
+                updated_df = updated_df.sort_values('experiment_family').reset_index(drop=True)
+                
+                # Save to Excel
+                with pd.ExcelWriter(global_spreadsheet_path, engine='openpyxl') as writer:
+                    updated_df.to_excel(writer, sheet_name='Master_Tracking', index=False)
+                
+                print(f"Global experiment tracking updated: {global_spreadsheet_path}")
+                
+            except Exception as e:
+                print(f"Error updating global tracking spreadsheet: {e}")
+        else:
+            print(f"Warning: Could not find data config at {data_config_path}")
+            
     except Exception as e:
-        print(f"An error occurred while writing to the Excel file: {e}")
+        print(f"Error loading data config for experiment characteristics: {e}")
 
     # --- 5. Generate Visualisations ---
-    plot_dir = reports_dir / "figures" / "aggregated_summaries"
-    plot_dir.mkdir(exist_ok=True)
+    from src.utils.report_paths import extract_family_base, experiment_family_path
+    
+    # Extract the family base from the experiment name
+    family_base = extract_family_base(base_experiment_name)
     
     # A. Generate Faceted Line Plots
     plot_data = summary_stats.reset_index().rename(columns={'index': 'Metric'})
     
-    # Plot 1: Main metrics 
+    # Plot 1: Main metrics
     main_metrics_df = plot_data[plot_data['Metric'] != 'Test Loss (BCE)']
+    
     plt.errorbar(main_metrics_df['Metric'], main_metrics_df['mean'], yerr=main_metrics_df['std'], fmt='-o', capsize=5, label='Mean ± Std Dev')
+    
     for _, row in main_metrics_df.iterrows():
         plt.text(
-            row['Metric'], 
-            row['mean'], 
-            f" {row['mean']:.4f} ", 
-            ha='center', 
-            va='bottom', # Position text above the point
-            fontsize=10, 
+            row['Metric'],
+            row['mean'],
+            f" {row['mean']:.4f} ",
+            ha='center',
+            va='bottom',
+            fontsize=10,
             fontweight='bold',
-            bbox=dict(facecolor='white', alpha=0.6, edgecolor='none', pad=1) # Add background
+            bbox=dict(facecolor='white', alpha=0.6, edgecolor='none', pad=1)
         )
-        
+    
     plt.title(f'Aggregated Performance Metrics\n({base_experiment_name})', fontsize=16)
     plt.ylabel('Score')
     plt.xlabel('Metric')
@@ -125,14 +218,24 @@ def aggregate(optimal_config: str):
     min_y = main_metrics_df['mean'].min() - main_metrics_df['std'].max() * 2
     max_y = main_metrics_df['mean'].max() + main_metrics_df['std'].max() * 2
     plt.ylim(min_y, max_y)
+    
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
-    faceted_plot_path_main = plot_dir / f"{base_experiment_name}_summary_faceted_main.pdf"
+    
+    # Save using family-based structure
+    faceted_plot_path_main = experiment_family_path(
+        full_experiment_name=base_experiment_name,
+        art_type="figure",
+        subfolder="aggregation_summary",
+        filename=f"{base_experiment_name}_summary.pdf"
+    )
+    
     plt.savefig(faceted_plot_path_main)
     print(f"\nSaved main metrics plot to: {faceted_plot_path_main}")
     plt.close()
-
+    
     print("\n--- Aggregation complete. ---")
+
 
 def aggregate_all_families(optimal_config: str):
     """

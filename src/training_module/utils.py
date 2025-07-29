@@ -12,6 +12,7 @@ import torch
 import numpy as np
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 from src.utils.report_paths import artefact_path, experiment_family_path, extract_family_base
+import re
 
 def find_project_root():
     """Find the project root by searching upwards for a marker file."""
@@ -230,9 +231,20 @@ def plot_training_history(history, experiment_name, output_dir):
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     
     
-    # Extract family base and create subfolder
-    family_base = extract_family_base(experiment_name)
-    subfolder = f"{experiment_name}_final"
+    # Extract seed from experiment name (e.g., "seed0" from "n1000_..._seed0_mlp_001_optimal")
+    seed_match = re.search(r'_seed(\d+)', experiment_name)
+    if seed_match:
+        seed_num = seed_match.group(1)
+        # Extract the base experiment name up to the seed
+        base_with_seed = re.sub(r'_mlp_.*$', '', experiment_name)
+        # Extract model name (e.g., "mlp_001")
+        model_match = re.search(r'_(mlp_\d+)', experiment_name)
+        model_name = model_match.group(1) if model_match else "model"
+        
+        subfolder = f"{base_with_seed}/{model_name}"
+    else:
+        # Fallback to old structure if no seed found
+        subfolder = f"{experiment_name}_final"
     
     save_path = experiment_family_path(
         full_experiment_name=experiment_name,
@@ -274,6 +286,20 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     family_base = extract_family_base(experiment_name)
     subfolder = f"{experiment_name}_final"
     
+    seed_match = re.search(r'_seed(\d+)', experiment_name)
+    if seed_match:
+        seed_num = seed_match.group(1)
+        # Extract the base experiment name up to the seed
+        base_with_seed = re.sub(r'_mlp_.*$', '', experiment_name)
+        # Extract model name (e.g., "mlp_001")
+        model_match = re.search(r'_(mlp_\d+)', experiment_name)
+        model_name = model_match.group(1) if model_match else "model"
+        
+        subfolder = f"{base_with_seed}/{model_name}"
+    else:
+        # Fallback to old structure if no seed found
+        subfolder = f"{experiment_name}_final"
+
     # Save confusion matrix
     cm_save_path = experiment_family_path(
         full_experiment_name=experiment_name,
@@ -283,7 +309,7 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     )
     plt.savefig(cm_save_path, bbox_inches='tight')
     plt.close()
-    print(f"\nSaved confusion matrix to: {cm_save_path}")
+    print(f"Saved confusion matrix to: {cm_save_path}")
 
     # Plot ROC Curve
     fpr, tpr, _ = roc_curve(all_labels, all_scores)
@@ -297,6 +323,7 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     plt.ylabel('True Positive Rate')
     plt.title(f'Receiver Operating Characteristic (ROC)\n({experiment_name})')
     plt.legend(loc="lower right")
+    # Save ROC curve
     roc_save_path = experiment_family_path(
         full_experiment_name=experiment_name,
         art_type="figure",
@@ -305,5 +332,6 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     )
     plt.savefig(roc_save_path, bbox_inches='tight')
     plt.close()
+    print(f"Saved ROC curve to: {roc_save_path}")
     print(f"Saved ROC curve to: {roc_save_path}")
 

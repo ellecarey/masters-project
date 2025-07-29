@@ -5,7 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from src.utils.filenames import metrics_filename, model_filename, config_filename, parse_optimal_config_name
 from src.data_generator_module.utils import find_project_root
-from src.utils.report_paths import artefact_path
+from src.utils.report_paths import artefact_path, reports_root
 
 def compare_families(original_optimal_config, perturbation_tag):
     orig_config_path = Path(original_optimal_config)
@@ -67,31 +67,111 @@ def compare_families(original_optimal_config, perturbation_tag):
     merged.to_csv(comparison_csv_path, index=False)
     print(f"Comparison data saved to: {comparison_csv_path}")
     
-    # 4. Print summary and plot
+    # 4. Print summary and generate single line plot comparison
     print("\nComparison table:")
     print(merged.to_string(index=False))
     print("\nSummary (mean/std):")
     print(merged[[f'{m}_delta' for m in metrics]].agg(['mean', 'std']))
 
-    # Generate comparison plots using new system
-    for m in metrics:
-        means = [orig_summary.loc['mean', m], pert_summary.loc['mean', m]]
-        stds = [orig_summary.loc['std', m], pert_summary.loc['std', m]]
+    # Generate single line plot comparison (similar to training history)
+    orig_summary = orig_df[metrics].agg(['mean', 'std'])
+    pert_summary = pert_df[metrics].agg(['mean', 'std'])
+    
+    # Create figure with similar style to training history
+    plt.figure(figsize=(12, 8))
+    
+    # X-axis positions for metrics
+    x_pos = range(len(metrics))
+    
+    # Plot lines for original and perturbed results
+    plt.errorbar(x_pos, orig_summary.loc['mean'], yerr=orig_summary.loc['std'], 
+                 marker='o', linewidth=2, capsize=5, capthick=2, 
+                 label='Original', color='blue', markersize=8)
+    
+    plt.errorbar(x_pos, pert_summary.loc['mean'], yerr=pert_summary.loc['std'], 
+                 marker='s', linewidth=2, capsize=5, capthick=2, 
+                 label='Perturbed', color='red', markersize=8)
+    
+    # Customize the plot
+    plt.title(f'Performance Comparison: Original vs Perturbed\n({orig_name} vs {pert_name})', 
+              fontsize=16, fontweight='bold')
+    plt.xlabel('Metrics', fontsize=14)
+    plt.ylabel('Score', fontsize=14)
+    plt.xticks(x_pos, metrics, fontsize=12)
+    plt.yticks(fontsize=12)
+    
+    # Add grid and legend
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend(fontsize=12, loc='best')
+    
+    # Add value labels on points
+    for i, metric in enumerate(metrics):
+        orig_val = orig_summary.loc['mean', metric]
+        pert_val = pert_summary.loc['mean', metric]
         
-        plt.figure()
-        plt.bar(['Original', 'Perturbed'], means, yerr=stds, capsize=4)
-        plt.title(f'{m}: Original vs Perturbed')
-        plt.ylabel(m)
-        plt.tight_layout()
+        # Add labels above the points
+        plt.annotate(f'{orig_val:.4f}', 
+                    (i, orig_val), 
+                    textcoords="offset points", 
+                    xytext=(0,10), 
+                    ha='center', fontsize=10, color='blue')
         
-        # Save using new report paths system
-        plot_path = artefact_path(
-            experiment=f"{orig_name}_vs_{pert_name}",
-            art_type="comparison", 
-            filename=f"{orig_name}_vs_{pert_name}_{m}.pdf"
-        )
-        plt.savefig(plot_path)
-        plt.close()
-        print(f"Saved comparison plot: {plot_path}")
+        plt.annotate(f'{pert_val:.4f}', 
+                    (i, pert_val), 
+                    textcoords="offset points", 
+                    xytext=(0,-15), 
+                    ha='center', fontsize=10, color='red')
+    
+    # Adjust layout and save
+    plt.tight_layout()
+    
+    # Save using the new report paths system
+    comparison_plot_path = artefact_path(
+        experiment=f"{orig_name}_vs_{pert_name}",
+        art_type="comparison",
+        filename=f"{orig_name}_vs_{pert_name}_metrics_comparison.pdf"
+    )
+    
+    plt.savefig(comparison_plot_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"Saved comparison line plot: {comparison_plot_path}")
+
+    # Optional: Create a second plot showing the deltas (differences)
+    deltas_mean = merged[[f'{m}_delta' for m in metrics]].mean()
+    deltas_std = merged[[f'{m}_delta' for m in metrics]].std()
+    
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(x_pos, deltas_mean, yerr=deltas_std, 
+                 marker='o', linewidth=2, capsize=5, capthick=2, 
+                 color='green', markersize=8)
+    
+    plt.axhline(y=0, color='black', linestyle='-', alpha=0.5)
+    plt.title(f'Performance Difference (Perturbed - Original)\n({orig_name} vs {pert_name})', 
+              fontsize=16, fontweight='bold')
+    plt.xlabel('Metrics', fontsize=14)
+    plt.ylabel('Difference in Score', fontsize=14)
+    plt.xticks(x_pos, metrics, fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Add value labels
+    for i, (metric, delta) in enumerate(zip(metrics, deltas_mean)):
+        plt.annotate(f'{delta:.4f}', 
+                    (i, delta), 
+                    textcoords="offset points", 
+                    xytext=(0,10 if delta >= 0 else -15), 
+                    ha='center', fontsize=10, color='green')
+    
+    plt.tight_layout()
+    
+    # Save delta plot
+    delta_plot_path = artefact_path(
+        experiment=f"{orig_name}_vs_{pert_name}",
+        art_type="comparison",
+        filename=f"{orig_name}_vs_{pert_name}_delta_comparison.pdf"
+    )
+    
+    plt.savefig(delta_plot_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"Saved delta comparison plot: {delta_plot_path}")
 
     print(f"\nAll comparison artifacts saved under: {reports_root() / 'comparisons' / f'{orig_name}_vs_{pert_name}'}")

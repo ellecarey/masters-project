@@ -76,17 +76,23 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
     if "visualisation" in config:
         vis_config = config["visualisation"]
         main_title, subtitle = utils.create_plot_title_from_config(config)
-
-        subfolder = experiment_name
         
-        # Use family-based path structure
+        # Use family-based path structure - put plot directly in the experiment subfolder
         from src.utils.report_paths import experiment_family_path
         feature_wise_plot_path = experiment_family_path(
             full_experiment_name=experiment_name,
             art_type="figure",
-            subfolder=subfolder,
-            filename=f"feature_wise_signal_noise_{experiment_name}.pdf"
+            subfolder=experiment_name,  # Use full experiment name as subfolder
+            filename=f"feature_wise_signal_noise.pdf"
         )
+        
+        generator.visualise_signal_noise_by_features(
+            save_path=str(feature_wise_plot_path),
+            title=main_title,
+            subtitle=subtitle,
+        )
+        
+        print(f"Generated visualization: {feature_wise_plot_path}")
 
     # Configuration management
     if not keep_original_name:
