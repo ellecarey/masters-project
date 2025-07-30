@@ -3,6 +3,15 @@ from pathlib import Path
 import pandas as pd
 from src.data_generator_module import utils
 from src.data_generator_module.gaussian_data_generator import GaussianDataGenerator
+import yaml
+from src.data_generator_module.utils import (
+    find_project_root,
+    create_filename_from_config,
+    create_plot_title_from_config
+)
+
+
+TRAINING_SEED = 99
 
 def generate_from_config(config_path: str, keep_original_name: bool = False):
     """
@@ -127,42 +136,58 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
     print("\nFeature-based signal vs noise data generation completed successfully!")
     print("Neural networks will learn to classify samples based on feature combinations only.\n")
 
-def generate_multi_seed(base_config_path: str, num_seeds: int = 5, start_seed: int = 0):
+def generate_multi_seed(base_config_path: str, num_seeds: int = 10, start_seed: int = 0, generate_training_seed: bool = True):
     """
     Generate multiple datasets from a base config, varying random_seed.
+    Can optionally generate a dedicated training/tuning dataset.
     """
     import yaml
     from pathlib import Path
     from src.data_generator_module.utils import find_project_root, create_filename_from_config
-
+    
     project_root = Path(find_project_root())
     config_dir = project_root / "configs" / "data_generation"
+
     with open(base_config_path, "r") as f:
         base_config = yaml.safe_load(f)
+
+    # Generate evaluation seeds (e.g., 0 through 4)
+    print(f"--- Generating {num_seeds} evaluation datasets (seeds {start_seed} to {start_seed + num_seeds - 1}) ---")
     for i in range(num_seeds):
         current_seed = start_seed + i
         new_config = base_config.copy()
         new_config["global_settings"]["random_seed"] = current_seed
+        
         new_config_base_name = create_filename_from_config(new_config)
         new_config_filename = f"{new_config_base_name}_config.yml"
         new_config_path = config_dir / new_config_filename
+
         with open(new_config_path, 'w') as f:
             yaml.dump(new_config, f, default_flow_style=False)
+        
         generate_from_config(str(new_config_path), keep_original_name=True)
 
+    # Generate the dedicated training seed if requested
+    if generate_training_seed:
+        print(f"\n--- Generating dedicated training dataset (seed {TRAINING_SEED}) ---")
+        training_config = base_config.copy()
+        training_config["global_settings"]["random_seed"] = TRAINING_SEED
+    
+        temp_base_name = create_filename_from_config(training_config)
+        training_base_name = temp_base_name.replace(f"_seed{TRAINING_SEED}", "_training")
+        
+        training_config_filename = f"{training_base_name}_config.yml" 
+        training_config_path = config_dir / training_config_filename
+
+        with open(training_config_path, 'w') as f:
+            yaml.dump(training_config, f, default_flow_style=False)
+            
+        generate_from_config(str(training_config_path), keep_original_name=True)
+        
 def perturb_multi_seed(data_config_base: str, perturb_config: str):
     """
     Apply perturbations to a family of datasets (multi-seed).
     """
-    import yaml
-    import pandas as pd
-    from pathlib import Path
-    from src.data_generator_module.gaussian_data_generator import GaussianDataGenerator
-    from src.data_generator_module.utils import (
-        find_project_root,
-        create_filename_from_config,
-        create_plot_title_from_config
-    )
 
     project_root = Path(find_project_root())
     perturb_config_path = project_root / perturb_config
@@ -172,7 +197,13 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
     base_data_config_path = project_root / data_config_base
     family_name = base_data_config_path.stem.split('_seed')[0]
     data_config_dir = project_root / "configs" / "data_generation"
+    
     all_data_configs = sorted(list(data_config_dir.glob(f"{family_name}_seed*_config.yml")))
+    
+    # Exclude the training seed from perturbation
+    evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
+    print(f"Found {len(evaluation_configs)} evaluation datasets to perturb ('_training' dataset will be skipped).")
+    
     for data_config_path in all_data_configs:
         with open(data_config_path, 'r') as f:
             data_config = yaml.safe_load(f)

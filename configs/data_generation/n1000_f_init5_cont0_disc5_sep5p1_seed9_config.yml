@@ -41,11 +41,7 @@ dataset_settings:
   n_initial_features: 5
   n_samples: 1000
 global_settings:
-  random_seed: 1
-perturbation_settings:
-- class_label: 0
-  feature: feature_4
-  sigma_shift: 1.0
+  random_seed: 9
 visualisation:
   max_features_to_show: 5
   n_bins: 25

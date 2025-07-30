@@ -27,10 +27,12 @@ def main():
     gen.add_argument("--config", required=True, type=str, help="Dataset config YAML")
     gen.add_argument("--keep-original-name", action="store_true", help="Do not rename the config after generation")
 
-    gen_multi = subparsers.add_parser("generate-multiseed", help="Multi-seed generation (vary random_seed)")
-    gen_multi.add_argument("--config", required=True, type=str, help="Base YAML config file")
-    gen_multi.add_argument("--num-seeds", type=int, default=5, help="Number of random seeds")
-    gen_multi.add_argument("--start-seed", type=int, default=0, help="Starting random seed")
+    gen_multi = subparsers.add_parser("generate-multiseed", help="Multi-seed generation. Generates N evaluation seeds and one training seed by default.")
+    gen_multi.add_argument("--config", required=True, type=str, help="Base YAML config file for the dataset family")
+    gen_multi.add_argument("--num-seeds",type=int,default=10, help="Number of evaluation seeds to generate (e.g., 0-9). Default: 10")
+    gen_multi.add_argument("--start-seed", type=int, default=0, help="Starting random seed for evaluation sets. Default: 0")
+    gen_multi.add_argument( "--no-training-seed",action="store_true",help="Do NOT generate the dedicated training dataset (seed 99).")
+
 
     pert_multi = subparsers.add_parser("perturb-multiseed", help="Multi-seed perturbation (add perturbation across a family)")
     pert_multi.add_argument("--data-config-base", required=True, type=str, help="Example config file from the family to perturb")
@@ -82,7 +84,7 @@ def main():
     if args.command == "generate":
         generate_from_config(args.config, keep_original_name=args.keep_original_name)
     elif args.command == "generate-multiseed":
-        generate_multi_seed(args.config, num_seeds=args.num_seeds, start_seed=args.start_seed)
+        generate_multi_seed(args.config, num_seeds=args.num_seeds, start_seed=args.start_seed, generate_training_seed=(not args.no_training_seed))
     elif args.command == "perturb-multiseed":
         perturb_multi_seed(args.data_config_base, args.perturb_config)
     if args.command == "train-single":

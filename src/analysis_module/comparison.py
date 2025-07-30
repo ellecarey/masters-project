@@ -11,41 +11,43 @@ from src.utils.report_paths import artefact_path, reports_root
 from src.utils.plotting_helpers import bounded_yerr, calculate_adaptive_ylimits, add_smart_value_labels, add_single_series_labels, format_plot_title
 
 
+
 def compare_families(original_optimal_config, perturbation_tag):
     apply_custom_plot_style()
     orig_config_path = Path(original_optimal_config)
-    # Parse components from filename or config
-    dataset_base, model_name, seed, pert_tag = parse_optimal_config_name(orig_config_path)
-    seeds = [0, 1, 2, 3, 4]  # or discover programmatically
+    project_root = Path(find_project_root())
+
+    # --- 1. Identify experiment names and discover seeds dynamically ---
+    dataset_base, model_name, _, _ = parse_optimal_config_name(orig_config_path)
+    
     orig_name = f"{dataset_base}"
     pert_name = f"{dataset_base}_{perturbation_tag}"
+
+
+    # Find all original metric files to determine available seeds
+    models_dir = project_root / "models"
+    orig_pattern = metrics_filename(dataset_base, model_name, seed="*", perturbation_tag=None)
+    orig_metric_files = list(models_dir.glob(orig_pattern.replace('*', '[0-9]*')))
     
-    # Gather metrics filenames for all seeds
-    project_root = Path(find_project_root())
+    if not orig_metric_files:
+        print(f"Error: No metric files found for original family: {orig_name}")
+        return
+
+    # Extract seed numbers from the filenames
+    seeds = sorted([int(re.search(r'seed(\d+)', f.stem).group(1)) for f in orig_metric_files])
+    print(f"Discovered {len(seeds)} seeds for comparison: {seeds}")
+
+    # --- 2. Gather Metrics ---
+    # The rest of the function remains largely the same, using the discovered `seeds` list.
     orig_metrics_files = [
-        project_root / "models" / metrics_filename(dataset_base, model_name, seed=s, perturbation_tag=None)
+        models_dir / metrics_filename(dataset_base, model_name, seed=s, perturbation_tag=None)
         for s in seeds
     ]
+
     pert_metrics_files = [
-        project_root / "models" / metrics_filename(dataset_base, model_name, seed=s, perturbation_tag=perturbation_tag)
+        models_dir / metrics_filename(dataset_base, model_name, seed=s, perturbation_tag=perturbation_tag)
         for s in seeds
     ]
-    
-    orig_metrics = []
-    for f in orig_metrics_files:
-        if f.exists():
-            with open(f) as fh:
-                row = pd.read_json(fh, typ='series')
-                row['seed'] = int(re.search(r'seed(\d+)', f.stem).group(1))
-                orig_metrics.append(row)
-    
-    pert_metrics = []
-    for f in pert_metrics_files:
-        if f.exists():
-            with open(f) as fh:
-                row = pd.read_json(fh, typ='series')
-                row['seed'] = int(re.search(r'seed(\d+)', f.stem).group(1))
-                pert_metrics.append(row)
     
     # DataFrames
     orig_df = pd.DataFrame(orig_metrics)

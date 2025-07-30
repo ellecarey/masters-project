@@ -16,6 +16,8 @@ from torch.utils.data import DataLoader
 from src.training_module.trainer import train_model
 from src.utils.filenames import experiment_name, metrics_filename, model_filename
 
+TRAINING_SEED = 99
+
 def train_single_config(data_config_path: str, training_config_path: str):
     """
     Train a model on a single data/training config pair.
@@ -306,6 +308,7 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
 def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_config: str):
     """
     Evaluates a single pre-trained model over a multi-seed dataset family.
+    This will ignore the dedicated training seed.
     """
     project_root = Path(find_project_root())
     base_data_config_path = project_root / data_config_base
@@ -315,14 +318,17 @@ def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_
     data_config_dir = project_root / "configs" / "data_generation"
     
     all_data_configs = sorted(list(data_config_dir.glob(f"{dataset_family_name}*_config.yml")))
+
+    # Exclude the training seed from evaluation
+    evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
     
-    if not all_data_configs:
-        print(f"Error: No data configs found for family '{dataset_family_name}' in '{data_config_dir}'")
+    if not evaluation_configs:
+        print(f"Error: No evaluation data configs found for family '{dataset_family_name}' in '{data_config_dir}'")
         return
 
-    print(f"\nFound {len(all_data_configs)} datasets to evaluate using model '{trained_model_path}'.")
+    print(f"\nFound {len(evaluation_configs)} datasets to evaluate using model '{trained_model_path}'.")
     
-    for data_config in all_data_configs:
+    for data_config in evaluation_configs:
         evaluate_single_config(trained_model_path, str(data_config), str(optimal_config_path))
 
     print("\nMulti-dataset evaluation complete.")

@@ -4,7 +4,9 @@ from pathlib import Path
 import yaml
 import random
 import numpy as np
+import re
 
+TRAINING_SEED = 99
 
 def find_project_root():
     """Find the project root by searching upwards for a marker file."""
@@ -58,15 +60,15 @@ def create_filename_from_config(config):
     dataset_settings = config.get("dataset_settings", {})
     class_config = config.get("create_feature_based_signal_noise_classification", {})
     global_settings = config.get("global_settings", {})
-    perturbations = config.get("perturbation_settings", []) # Get perturbation settings
+    perturbations = config.get("perturbation_settings", [])
 
     n_samples = dataset_settings.get("n_samples", 0)
     n_features = dataset_settings.get("n_initial_features", 0)
-
+    
     feature_types = class_config.get("feature_types", {})
     continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
     discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
-
+    
     signal_features = class_config.get("signal_features", {})
     noise_features = class_config.get("noise_features", {})
     separations = [
@@ -74,7 +76,6 @@ def create_filename_from_config(config):
         for f in signal_features if f in noise_features
     ]
     avg_separation = sum(separations) / len(separations) if separations else 0.0
-
     random_seed = global_settings.get("random_seed", 42)
 
     name_parts = [
@@ -85,7 +86,6 @@ def create_filename_from_config(config):
         f"sep{str(avg_separation).replace('.', 'p')}"
     ]
 
-    # --- Add perturbation details to the filename ---
     if perturbations:
         pert_str_parts = []
         for p in perturbations:
@@ -93,11 +93,15 @@ def create_filename_from_config(config):
             feature_index = p['feature'].split('_')[-1]
             shift_val = str(p['sigma_shift']).replace('.', 'p').replace('-', 'm')
             pert_str_parts.append(f"pert_f{feature_index}{class_str}_by{shift_val}s")
-        
         name_parts.append("_".join(pert_str_parts))
 
-    name_parts.append(f"seed{random_seed}")
 
+    if random_seed == TRAINING_SEED:
+        name_parts.append("training")
+    else:
+        name_parts.append(f"seed{random_seed}")
+
+    
     return "_".join(name_parts)
 
 
