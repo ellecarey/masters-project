@@ -1,3 +1,34 @@
+import yaml
+import subprocess
+import sys
+import time
+from pathlib import Path
+import optuna
+from tqdm import tqdm
+import pandas as pd
+import copy
+import torch
+import os
+import json
+import matplotlib.pyplot as plt
+
+from optuna.trial import TrialState
+from optuna.visualization.matplotlib import plot_optimization_history, plot_param_importances
+import warnings
+
+from src.data_generator_module import utils as data_utils
+from src.training_module.models import get_model
+from src.training_module.dataset import TabularDataset
+from src.training_module.trainer import train_model
+from sklearn.model_selection import train_test_split
+import torch.nn as nn
+
+from src.data_generator_module.utils import find_project_root, create_filename_from_config
+from src.utils.report_paths import extract_family_base
+from src.utils.filenames import model_filename
+    
+    
+
 def run_hyperparameter_tuning(
     data_config: str,
     tuning_config: str,
@@ -8,20 +39,6 @@ def run_hyperparameter_tuning(
     """
     Run Optuna hyperparameter tuning on a dataset given a search space config.
     """
-    import optuna
-    import pandas as pd
-    from pathlib import Path
-    import copy
-    import torch
-    import os
-
-    from src.data_generator_module import utils as data_utils
-    from src.training_module.models import get_model
-    from src.training_module.dataset import TabularDataset
-    from src.training_module.trainer import train_model
-    from sklearn.model_selection import train_test_split
-    import torch.nn as nn
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
@@ -134,16 +151,7 @@ def run_experiments(job: str):
     Launch (in parallel) all workers for a multi-worker Optuna tuning job,
     monitor progress, show step-by-step feedback, as in run_experiments.py.
     """
-    import yaml
-    import subprocess
-    import sys
-    import time
-    from pathlib import Path
-    import optuna
-    from tqdm import tqdm
 
-    # Find project root and experiments config
-    from src.data_generator_module.utils import find_project_root, create_filename_from_config
 
     # --- Load experimental job config ---
     try:
@@ -168,14 +176,18 @@ def run_experiments(job: str):
 
     # --- Prompt user to select a data config ---
     config_dir = project_root / "configs" / "data_generation"
-    available_configs = sorted(list(config_dir.glob("*.yml"))) + sorted(list(config_dir.glob("*.yaml")))
+    all_data_configs = sorted(list(config_dir.glob("*.yml"))) + sorted(list(config_dir.glob("*.yaml")))
+    available_configs = [
+        path for path in all_data_configs if "_training_config.yml" in path.name
+    ]
     if not available_configs:
-        print(f"Error: No data configuration files found in '{config_dir}'.")
+        print(f"Error: No '_training' data configuration files found in '{config_dir}'.")
         sys.exit(1)
 
-    print("\nPlease select a data configuration to run the tuning job on:")
+    print("\nPlease select a _training data configuration to run the tuning job on:")
     for i, path in enumerate(available_configs):
         print(f" [{i + 1}] {path.name}")
+
     while True:
         try:
             choice = input(f"\nEnter the number of the config to use (1-{len(available_configs)}): ")
@@ -298,17 +310,6 @@ def run_tuning_analysis(data_config: str, base_training_config: str):
     Analyse a completed Optuna study, interactively select the optimal trial, and
     generate an optimal training config. Mirrors run_tuning_analysis.py.
     """
-    import os
-    import yaml
-    import json
-    import matplotlib.pyplot as plt
-    from pathlib import Path
-    import optuna
-    from optuna.trial import TrialState
-    from optuna.visualization.matplotlib import plot_optimization_history, plot_param_importances
-    import warnings
-
-    from src.data_generator_module import utils as data_utils
 
     warnings.filterwarnings("ignore", category=optuna.exceptions.ExperimentalWarning)
 
@@ -371,7 +372,7 @@ def run_tuning_analysis(data_config: str, base_training_config: str):
     model_name = tuning_config.get("model_name", "model")
 
     # Extract family base from dataset_base_name (remove _seed\d+)
-    from src.utils.report_paths import extract_family_base
+
     family_base = extract_family_base(dataset_base_name)
     
     # Create tuning-specific directory at family level
@@ -418,11 +419,34 @@ def run_tuning_analysis(data_config: str, base_training_config: str):
     )
 
     # --- Print next steps ---
+    model_output_dir = project_root / "models"
+    final_model_path = model_output_dir / model_filename(
+        dataset_base_name, model_name_suffix, optimized=True
+    )
+
+    family_base = extract_family_base(dataset_base_name)
+    eval_data_config_path = project_root / "configs" / "data_generation" / f"{family_base}_seed0_config.yml"
+
     print("\n" + "="*80)
-    print("Next Step: Choose a final training method:")
+    print("Next Steps: Train your final model and evaluate it on all seeds")
     print("="*80)
-    print("\nOPTION 1: Train a single model on this specific dataset")
-    print(f"uv run experiment_manager.py train-multiseed --data-config-base {data_config_path} --optimal-config {optimal_config_path}")
-    print("\nOPTION 2: Train models on ALL datasets in this family (all seeds)")
-    print(f"uv run experiment_manager.py train-multiseed --data-config-base {data_config_path} --optimal-config {optimal_config_path}")
+
+    print("\nSTEP 1: Train a single model using the optimal hyperparameters on the training dataset.")
+    print("----------------------------------------------------------------------------------")
+    train_command = (
+        f"uv run experiment_manager.py train-single \\\n"
+        f"    --data-config {data_config_path} \\\n"
+        f"    --optimal-config {optimal_config_path}"
+    )
+    print(train_command)
+
+    print("\nSTEP 2: Evaluate that single trained model against all evaluation datasets (seeds 0-9).")
+    print("---------------------------------------------------------------------------------------")
+    eval_command = (
+        f"uv run experiment_manager.py evaluate-multiseed \\\n"
+        f"    --trained-model {final_model_path} \\\n"
+        f"    --data-config-base {eval_data_config_path} \\\n"
+        f"    --optimal-config {optimal_config_path}"
+    )
+    print(eval_command)
     print("\n" + "="*80)

@@ -232,20 +232,7 @@ def plot_training_history(history, experiment_name, output_dir):
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     
     
-    # Extract seed from experiment name (e.g., "seed0" from "n1000_..._seed0_mlp_001_optimal")
-    seed_match = re.search(r'_seed(\d+)', experiment_name)
-    if seed_match:
-        seed_num = seed_match.group(1)
-        # Extract the base experiment name up to the seed
-        base_with_seed = re.sub(r'_mlp_.*$', '', experiment_name)
-        # Extract model name (e.g., "mlp_001")
-        model_match = re.search(r'_(mlp_\d+)', experiment_name)
-        model_name = model_match.group(1) if model_match else "model"
-        
-        subfolder = f"{base_with_seed}/{model_name}"
-    else:
-        # Fallback to old structure if no seed found
-        subfolder = f"{experiment_name}_final"
+    subfolder = re.sub(r'_mlp_.*$', '', experiment_name)
     
     save_path = experiment_family_path(
         full_experiment_name=experiment_name,
@@ -253,10 +240,11 @@ def plot_training_history(history, experiment_name, output_dir):
         subfolder=subfolder,
         filename="training_history.pdf"
     )
-    
+
     plt.savefig(save_path)
     plt.close()
     print(f"Saved training history plot to: {save_path}")
+
 
 def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     """
@@ -275,34 +263,18 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
             all_labels.extend(labels.cpu().numpy())
     
     all_preds = np.round(all_scores)
-
+    
+    subfolder = re.sub(r'_mlp_.*$', '', experiment_name)
+    
     # Plot Confusion Matrix
     cm = confusion_matrix(all_labels, all_preds)
     plt.figure()
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=['Noise', 'Signal'], yticklabels=['Noise', 'Signal'])
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Noise', 'Signal'], yticklabels=['Noise', 'Signal'])
     cm_title = format_plot_title("Confusion Matrix for", experiment_name, sub_width=60)
     plt.title(cm_title)
     plt.ylabel('Actual Class')
     plt.xlabel('Predicted Class')
-    family_base = extract_family_base(experiment_name)
-    subfolder = f"{experiment_name}_final"
-    
-    seed_match = re.search(r'_seed(\d+)', experiment_name)
-    if seed_match:
-        seed_num = seed_match.group(1)
-        # Extract the base experiment name up to the seed
-        base_with_seed = re.sub(r'_mlp_.*$', '', experiment_name)
-        # Extract model name (e.g., "mlp_001")
-        model_match = re.search(r'_(mlp_\d+)', experiment_name)
-        model_name = model_match.group(1) if model_match else "model"
-        
-        subfolder = f"{base_with_seed}/{model_name}"
-    else:
-        # Fallback to old structure if no seed found
-        subfolder = f"{experiment_name}_final"
 
-    # Save confusion matrix
     cm_save_path = experiment_family_path(
         full_experiment_name=experiment_name,
         art_type="figure",
@@ -326,7 +298,7 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     roc_title = format_plot_title("Receiver Operating Characteristic (ROC)", experiment_name, sub_width=60)
     plt.title(roc_title)
     plt.legend(loc="lower right")
-    # Save ROC curve
+
     roc_save_path = experiment_family_path(
         full_experiment_name=experiment_name,
         art_type="figure",
@@ -336,5 +308,3 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     plt.savefig(roc_save_path, bbox_inches='tight')
     plt.close()
     print(f"Saved ROC curve to: {roc_save_path}")
-    print(f"Saved ROC curve to: {roc_save_path}")
-

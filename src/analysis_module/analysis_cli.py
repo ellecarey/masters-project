@@ -83,166 +83,126 @@ def aggregate(optimal_config: str):
     optimal_config_path = Path(optimal_config)
     if not optimal_config_path.is_absolute():
         optimal_config_path = project_root / optimal_config_path
-
     if not optimal_config_path.exists():
         print(f"Error: Optimal config file not found at '{optimal_config_path}'")
         return
 
     base_experiment_name = optimal_config_path.stem.replace('_config', '')
-    
     print(f"--- Aggregating results for experiment family: {base_experiment_name} ---")
 
     metric_files = find_experiment_family(models_dir, base_experiment_name)
-
     if not metric_files:
         print(f"Error: No metric files found for this experiment family in '{models_dir}'.")
         return
-        
     print(f"Found {len(metric_files)} metric files to aggregate.")
 
     # --- 2. Load and Aggregate Metrics ---
     all_metrics = []
+    # highlight-start
     for f in metric_files:
-        with open(f, 'r') as file:
-            metrics = json.load(file)
-            seed = f.stem.split('_seed')[-1].split('_')[0]
-            metrics['seed'] = int(seed)
-            all_metrics.append(metrics)
+        # Use a regular expression to reliably find the seed number.
+        match = re.search(r'_seed(\d+)', f.stem)
+        
+        # Only process files that have a valid seed number in their name.
+        if match:
+            try:
+                seed = int(match.group(1))
+                with open(f, 'r') as file:
+                    metrics = json.load(file)
+                metrics['seed'] = seed
+                all_metrics.append(metrics)
+            except (ValueError, json.JSONDecodeError) as e:
+                print(f"Warning: Skipping file '{f.name}' due to a processing error: {e}")
+        else:
+            # This will safely ignore files like the "..._training_..._metrics.json"
+            print(f"Info: Skipping file '{f.name}' as it does not contain a seed number.")
+    # highlight-end
+    
+    if not all_metrics:
+        print("Error: No valid metric files could be processed.")
+        return
 
     results_df = pd.DataFrame(all_metrics)
+    # ... (The rest of the function for summarizing and plotting remains unchanged)
     results_df = results_df[['seed'] + [col for col in results_df.columns if col != 'seed']]
-    
-    # --- 3. Calculate Summary Statistics ---
     summary_stats = results_df.drop(columns=['seed']).agg(['mean', 'std']).T
     summary_stats['mean'] = summary_stats['mean'].round(4)
     summary_stats['std'] = summary_stats['std'].round(4)
-    
+
     print("\n--- Aggregated Results ---")
     print(results_df.round(4).to_string(index=False))
     print("\n--- Summary Statistics (Mean & Std Dev) ---")
     print(summary_stats)
     
-    # --- 4. Save to Global Experiment Tracking Spreadsheet ---
+    # ... (Saving to spreadsheet and plotting logic)
     try:
-        # Load the corresponding data config to extract characteristics
         base_config_name = base_experiment_name.replace('_mlp_001_optimal', '')
         data_config_path = project_root / "configs" / "data_generation" / f"{base_config_name}_config.yml"
-        
         if data_config_path.exists():
             from src.data_generator_module import utils as data_utils
             data_config_dict = data_utils.load_yaml_config(data_config_path)
-            
-            # Extract experiment characteristics
             experiment_characteristics = extract_experiment_characteristics(base_experiment_name, data_config_dict)
-            
-            # Create a single row for this experiment
             experiment_row = {
                 'experiment_family': base_experiment_name,
                 'n_samples': experiment_characteristics['n_samples'],
-                'n_features': experiment_characteristics['n_features'], 
+                'n_features': experiment_characteristics['n_features'],
                 'continuous': experiment_characteristics['continuous'],
                 'discrete': experiment_characteristics['discrete'],
                 'separation': experiment_characteristics['separation'],
                 'perturbation': experiment_characteristics['perturbation'],
             }
-            
-            # Add aggregated metrics (mean and std for each metric)
             for metric in ['Test Loss (BCE)', 'Accuracy', 'F1-Score', 'Precision', 'Recall', 'AUC']:
                 if metric in summary_stats.index:
                     experiment_row[f'{metric}_mean'] = summary_stats.loc[metric, 'mean']
                     experiment_row[f'{metric}_std'] = summary_stats.loc[metric, 'std']
-            
-            # Global tracking spreadsheet path
             global_spreadsheet_path = reports_root() / "experiment_tracking_master.xlsx"
-            
-            # Ensure the reports directory exists
             global_spreadsheet_path.parent.mkdir(parents=True, exist_ok=True)
-            
             try:
-                # Load existing data or create new DataFrame
                 if global_spreadsheet_path.exists():
                     existing_df = pd.read_excel(global_spreadsheet_path, sheet_name='Master_Tracking')
-                    # Remove existing row for this experiment if it exists
                     existing_df = existing_df[existing_df['experiment_family'] != base_experiment_name]
-                    # Add the new row
                     updated_df = pd.concat([existing_df, pd.DataFrame([experiment_row])], ignore_index=True)
                 else:
                     updated_df = pd.DataFrame([experiment_row])
-                
-                # Sort by experiment family name for consistent ordering
                 updated_df = updated_df.sort_values('experiment_family').reset_index(drop=True)
-                
-                # Save to Excel
                 with pd.ExcelWriter(global_spreadsheet_path, engine='openpyxl') as writer:
                     updated_df.to_excel(writer, sheet_name='Master_Tracking', index=False)
-                
                 print(f"Global experiment tracking updated: {global_spreadsheet_path}")
-                
             except Exception as e:
                 print(f"Error updating global tracking spreadsheet: {e}")
         else:
             print(f"Warning: Could not find data config at {data_config_path}")
-            
     except Exception as e:
         print(f"Error loading data config for experiment characteristics: {e}")
 
-    # --- 5. Generate Visualisations ---
+    # ... (Plotting logic)
     from src.utils.report_paths import extract_family_base, experiment_family_path
-    
-    # Extract the family base from the experiment name
     family_base = extract_family_base(base_experiment_name)
-    
-    # A. Generate Faceted Line Plots
     plot_data = summary_stats.reset_index().rename(columns={'index': 'Metric'})
-    
-    # Plot 1: Main metrics
     main_metrics_df = plot_data[plot_data['Metric'] != 'Test Loss (BCE)']
-
-    yerr = bounded_yerr(main_metrics_df['mean'].values,
-                     main_metrics_df['std'].values)
-    
-    plt.errorbar(
-        main_metrics_df['Metric'],
-        main_metrics_df['mean'],
-        yerr=yerr,
-        fmt='-o', capsize=5, label='Mean ± Std Dev')
-    
+    yerr = bounded_yerr(main_metrics_df['mean'].values, main_metrics_df['std'].values)
+    plt.errorbar(main_metrics_df['Metric'], main_metrics_df['mean'], yerr=yerr, fmt='-o', capsize=5, label='Mean ± Std Dev')
     value_labels = [f'{val:.3f}' for val in main_metrics_df['mean'].values]
-    add_single_series_labels(
-        x_positions=range(len(main_metrics_df)),
-        values=main_metrics_df['mean'].values,
-        labels_text=value_labels,
-        color='black'
-    )
-    
+    add_single_series_labels(x_positions=range(len(main_metrics_df)), values=main_metrics_df['mean'].values, labels_text=value_labels, color='black')
     title = format_plot_title("Aggregated Performance Metrics for", base_experiment_name)
     plt.title(title)
     plt.ylabel('Score')
     plt.xlabel('Metric')
     plt.xticks(rotation=45, ha="right")
-    
-    # Adjust y-axis limits to give labels space
-    y_min, y_max = calculate_adaptive_ylimits(
-        main_metrics_df['mean'].values, 
-        main_metrics_df['std'].values
-    )
-    
+    y_min, y_max = calculate_adaptive_ylimits(main_metrics_df['mean'].values, main_metrics_df['std'].values)
     plt.grid(True, linestyle='--', alpha=0.7)
     apply_decimal_formatters(plt.gca(), precision=3)
     plt.tight_layout()
-    
-    # Save using family-based structure
     faceted_plot_path_main = experiment_family_path(
         full_experiment_name=base_experiment_name,
         art_type="figure",
         subfolder="aggregation_summary",
         filename=f"{base_experiment_name}_summary.pdf"
     )
-    
     plt.savefig(faceted_plot_path_main)
     print(f"\nSaved main metrics plot to: {faceted_plot_path_main}")
     plt.close()
-    
+
     print("\n--- Aggregation complete. ---")
 
 
@@ -251,61 +211,78 @@ def aggregate_all_families(optimal_config: str):
     Aggregate both the original and all detected perturbed experiment families
     sharing the same base as the given optimal config, fully automatically.
     """
-    # Setup
+    # --- Setup ---
     orig_opt_path = Path(optimal_config)
-    project_root = Path(find_project_root())
-    models_dir = project_root / "models"
-
-    # 1. Find base family info from the original config name
-    #   E.g. base = n1000_f_init5_cont0_disc5_sep5p1
-    orig_base = orig_opt_path.stem  # e.g. n1000_f_init5_cont0_disc5_sep5p1_seed0_mlp_001_optimal
-    # Remove _seedX_mlp_001_optimal if present
-    base_prefix = re.sub(r'_seed\d+_mlp_001_optimal$', '', orig_base)
-
-    print(f"Scanning for experiment families with base: {base_prefix}")
-
-    # 2. Collect all relevant metric files
-    all_metric_files = list(models_dir.glob(f"{base_prefix}*_metrics.json"))
-    if not all_metric_files:
-        print("No matching metric files found at all.")
+    if not orig_opt_path.exists():
+        print(f"Error: The provided optimal config file does not exist: {orig_opt_path}")
         return
 
-    # 3. Discover perturbation family bases
-    family_bases = set()
-    for mf in all_metric_files:
-        fname = mf.stem
-        if "_pert_" in fname:
-            pert_base = fname.split("_seed")[0]
-            family_bases.add(pert_base)
-        else:
-            family_bases.add(fname.split("_seed")[0])  # original
+    project_root = Path(find_project_root())
+    models_dir = project_root / "models"
+    
+    # --- 1. Find base family info from the provided config name ---
+    orig_base_name = orig_opt_path.stem
+    base_prefix = re.sub(r'_(?:seed\d+|training)_mlp_.*_optimal$', '', orig_base_name)
+    print(f"Scanning for experiment families with base: {base_prefix}")
 
-    # 4. For each unique family base, synthesize the needed dummy config and aggregate
-    # Get model and suffix info from the provided optimal_config
-    stem_parts = orig_opt_path.stem.split("_")
-    # Locate the model suffix (e.g., "_mlp_001_optimal")
-    for i, s in enumerate(stem_parts):
-        if s.startswith("mlp"):
-            model_suffix = "_".join(stem_parts[i:])  # e.g., mlp_001_optimal
-            break
-    else:
-        model_suffix = "mlp_001_optimal"
+    # --- 2. Collect all relevant metric files to discover families ---
+    all_metric_files = list(models_dir.glob(f"{base_prefix}*_metrics.json"))
+    if not all_metric_files:
+        print("No matching metric files found.")
+        return
 
+    family_bases = {
+        mf.stem.split("_seed")[0] for mf in all_metric_files if "_seed" in mf.stem
+    }
+
+    # --- 3. Extract model suffix from the provided optimal config name ---
+    model_suffix_match = re.search(r'(_mlp_.*_optimal)$', orig_opt_path.stem)
+    if not model_suffix_match:
+        print(f"Error: Could not determine model suffix from '{orig_opt_path.name}'")
+        return
+    model_suffix = model_suffix_match.group(1)
+
+    # --- 4. Loop through discovered families and aggregate ---
     for family in sorted(family_bases):
-        # synthesize e.g. n1000_f_init5_cont0_disc5_sep5p1_seed0_mlp_001_optimal.yml or
-        #            n1000_f_init5_cont0_disc5_sep5p1_pert_f4n_by1p0s_seed0_mlp_001_optimal.yml
-        family_config_filename = f"{family}_seed0_{model_suffix}.yml"
+        family_config_filename = f"{family}_seed0{model_suffix}.yml"
         family_config_path = orig_opt_path.parent / family_config_filename
 
-        # If file doesn't exist, copy the original optimal config—it's only for filename pattern matching.
         if not family_config_path.exists():
+            print(f"Creating temporary config '{family_config_path.name}' for aggregation.")
             shutil.copyfile(orig_opt_path, family_config_path)
 
-        # Aggregate results for this family
         print(f"\nAggregating family: {family}")
         aggregate(str(family_config_path))
 
+    # --- Suggest the comparison step ---
     print("\n--- Auto-aggregation of all original and perturbed experiment families complete. ---")
+
+    perturbation_tag = None
+    for family in family_bases:
+        if "_pert_" in family:
+            match = re.search(r'_(pert_.*)$', family)
+            if match:
+                perturbation_tag = match.group(1)
+                break
+    
+    if perturbation_tag:
+        print("\n" + "="*80)
+        print("Next Step: Compare the aggregated results")
+        print("="*80 + "\n")
+        print("Use the 'compare-families' command to generate plots comparing the performance")
+        print("of the original dataset against the perturbed version.")
+        
+        # We need to construct the path to the original family's optimal config for the next command.
+        # The user provided the training config, but compare-families needs one from the family.
+        original_family_optimal_config = orig_opt_path.parent / f"{base_prefix}_seed0{model_suffix}.yml"
+        
+        compare_command = (
+            f"uv run experiment_manager.py compare-families \\\n"
+            f"    --original-optimal-config {original_family_optimal_config} \\\n"
+            f"    --perturbation-tag {perturbation_tag}"
+        )
+        print(compare_command)
+        print("\n" + "="*80)
 
 def main():
     parser = argparse.ArgumentParser(

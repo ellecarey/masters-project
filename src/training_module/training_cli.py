@@ -5,6 +5,7 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 import torch.nn as nn
 import re
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 
 from src.data_generator_module import utils as data_utils
 from src.data_generator_module.plotting_style import apply_custom_plot_style
@@ -21,8 +22,21 @@ TRAINING_SEED = 99
 def train_single_config(data_config_path: str, training_config_path: str):
     """
     Train a model on a single data/training config pair.
+    This function is restricted to only run on dedicated '_training' datasets.
     """
     apply_custom_plot_style()
+
+    # highlight-start
+    # --- Safeguard: Ensure this is a training dataset ---
+    if "_training" not in Path(data_config_path).name:
+        print("\nERROR: Invalid dataset for 'train-single'.")
+        print("This command is exclusively for training on the dedicated '_training' dataset.")
+        print(f"You provided: {Path(data_config_path).name}")
+        print("\nPlease use a data config file with '_training_config.yml' in its name.")
+        print("To evaluate your model on seeded datasets, use the 'evaluate-multiseed' command instead.")
+        return
+    # highlight-end
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
@@ -38,27 +52,21 @@ def train_single_config(data_config_path: str, training_config_path: str):
 
     train_settings = training_config["training_settings"]
     model_name = train_settings["model_name"]
-
-    # --- Generate the canonical base, perturbation tag, and seed ---
     full_base = data_utils.create_filename_from_config(data_config)
-    # This regex strips optional _pert_... and always strips _seedN at the end
-    regex = r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)$"
-    m = re.match(regex, full_base)
-    if not m:
-        raise ValueError(f"Could not parse base/pert/seed from {full_base}")
-    base = m.group("base")
-    pert_tag = m.group("pert")
-    seed = int(m.group("seed"))
 
-    exp_name = experiment_name(base, model_name, seed=seed, perturbation_tag=pert_tag)
+    # --- Generate canonical names (now only for training datasets) ---
+    exp_name = f"{full_base}_{model_name}_optimal"
+    model_filepath_str = f"{full_base}_{model_name}_optimal_model.pt"
+    metrics_filepath_str = f"{full_base}_{model_name}_optimal_metrics.json"
+    
     print(f"\nRunning experiment: {exp_name}")
 
     project_root = Path(data_utils.find_project_root())
-    output_plot_dir = Path("placeholder")
     model_output_dir = project_root / train_settings["model_output_dir"]
     model_output_dir.mkdir(parents=True, exist_ok=True)
-    model_filepath = model_output_dir / model_filename(base, model_name, seed=seed, perturbation_tag=pert_tag)
-    metrics_filepath = model_output_dir / metrics_filename(base, model_name, seed=seed, perturbation_tag=pert_tag)
+
+    model_filepath = model_output_dir / model_filepath_str
+    metrics_filepath = model_output_dir / metrics_filepath_str
 
     # --- Load Data ---
     dataset_filepath = project_root / "data" / f"{full_base}_dataset.csv"
@@ -69,16 +77,17 @@ def train_single_config(data_config_path: str, training_config_path: str):
         print(f"Error: Data file not found at '{dataset_filepath}'. Please generate it first.")
         return
 
+    # --- Data splitting and DataLoader ---
     hyperparams = train_settings["hyperparameters"]
     global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
     data_utils.set_global_seed(global_seed)
-
-    # --- Data splitting and DataLoader ---
+    
     target_column = train_settings["target_column"]
     X = data.drop(columns=[target_column])
     y = data[target_column]
     val_ratio = train_settings["validation_set_ratio"]
     test_ratio = train_settings["test_set_ratio"]
+
     X_train, X_temp, y_train, y_temp = train_test_split(
         X, y, test_size=(val_ratio + test_ratio), random_state=global_seed, stratify=y
     )
@@ -86,26 +95,24 @@ def train_single_config(data_config_path: str, training_config_path: str):
     X_val, X_test, y_val, y_test = train_test_split(
         X_temp, y_temp, test_size=relative_test_ratio, random_state=global_seed, stratify=y_temp
     )
-
     print(f"Data split into: {len(X_train)} train, {len(X_val)} validation, {len(X_test)} test samples.")
-
     train_dataset = TabularDataset(X_train, y_train)
     val_dataset = TabularDataset(X_val, y_val)
     test_dataset = TabularDataset(X_test, y_test)
-    from torch.utils.data import DataLoader
     train_loader = DataLoader(dataset=train_dataset, batch_size=hyperparams["batch_size"], shuffle=True)
     val_loader = DataLoader(dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
-
+    
     # --- Model initialisation, training, and scheduler creation ---
     ARCH_PARAMS = {"mlp_001": {"hidden_size", "output_size"}}
     valid_arch_keys = ARCH_PARAMS.get(model_name, set())
     model_params = {key: hyperparams[key] for key in hyperparams if key in valid_arch_keys}
     model_params["input_size"] = X_train.shape[1]
+    
     model = get_model(model_name, model_params)
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
-
+    
     scheduler_settings = train_settings.get("scheduler_settings", {})
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser,
@@ -113,7 +120,7 @@ def train_single_config(data_config_path: str, training_config_path: str):
         factor=scheduler_settings.get('factor', 0.1),
         patience=scheduler_settings.get('patience', 5)
     )
-
+    
     early_stopping_settings = train_settings.get("early_stopping_settings", {})
     patience = early_stopping_settings.get("patience", 10)
 
@@ -126,7 +133,6 @@ def train_single_config(data_config_path: str, training_config_path: str):
         patience=patience
     )
 
-    # --- Final evaluation on the held-out test set ---
     print("\n--- Final Model Evaluation on Test Set ---")
     trained_model.eval()
     test_loss, all_preds, all_labels = 0.0, [], []
@@ -138,23 +144,16 @@ def train_single_config(data_config_path: str, training_config_path: str):
             test_loss += loss.item()
             all_preds.extend(torch.round(torch.sigmoid(outputs)).cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
-
+    
     avg_test_loss = test_loss / len(test_loader)
-    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+    
     accuracy = accuracy_score(all_labels, all_preds)
     f1 = f1_score(all_labels, all_preds)
-    precision = precision_score(all_labels, all_preds)
-    recall = recall_score(all_labels, all_preds)
+    precision = precision_score(all_labels, all_preds, zero_division=0)
+    recall = recall_score(all_labels, all_preds, zero_division=0)
     final_auc = roc_auc_score(all_labels, all_preds)
+    print(f"Final Test Loss (BCE): {avg_test_loss:.4f}, Accuracy: {accuracy:.4f}, F1-Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, AUC: {final_auc:.4f}")
 
-    print(f"Final Test Loss (BCE): {avg_test_loss:.4f}")
-    print(f"Accuracy: {accuracy:.4f}")
-    print(f"F1-Score: {f1:.4f}")
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    print(f"AUC: {final_auc:.4f}")
-
-    # --- Save final metrics to a JSON file ---
     final_metrics = {
         "Test Loss (BCE)": avg_test_loss, "Accuracy": accuracy, "F1-Score": f1,
         "Precision": precision, "Recall": recall, "AUC": final_auc
@@ -163,20 +162,11 @@ def train_single_config(data_config_path: str, training_config_path: str):
         json.dump(final_metrics, f, indent=4)
     print(f"Final metrics saved to: {metrics_filepath}")
 
-    # --- Generating Final Evaluation Plots ---
     print("\n--- Generating Final Evaluation Plots ---")
-    train_utils.plot_training_history(
-        history=history,
-        experiment_name=exp_name,  # Use clean experiment name
-        output_dir=output_plot_dir
-    )
+    output_plot_dir = Path("placeholder")
+    train_utils.plot_training_history(history=history, experiment_name=exp_name, output_dir=output_plot_dir)
+    train_utils.plot_final_metrics(model=trained_model, test_loader=test_loader, device=device, experiment_name=exp_name, output_dir=output_plot_dir)
     
-    train_utils.plot_final_metrics(
-        model=trained_model, test_loader=test_loader, device=device,
-        experiment_name=exp_name,  # Use clean experiment name  
-        output_dir=output_plot_dir
-    )
-
     torch.save(trained_model.state_dict(), model_filepath)
     print(f"\nModel state dictionary saved to {model_filepath}")
 
@@ -221,11 +211,15 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
     model_name = train_settings["model_name"]
     hyperparams = train_settings["hyperparameters"]
 
-    # --- Derive Experiment Name for Output Metrics ---
+    # --- Derive Experiment Name for Output Metrics 
     full_base = data_utils.create_filename_from_config(data_config)
     regex = r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)$"
     m = re.match(regex, full_base)
     if not m:
+        # Fallback for the training file itself if it's evaluated by mistake
+        if "_training" in full_base:
+             print(f"Skipping evaluation on training file: {full_base}")
+             return
         raise ValueError(f"Could not parse base/pert/seed from {full_base}")
     base, pert_tag, seed_str = m.group("base"), m.group("pert"), m.group("seed")
     seed = int(seed_str)
@@ -236,7 +230,7 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
     metrics_filepath = model_output_dir / metrics_filename(base, model_name, seed=seed, perturbation_tag=pert_tag)
     print(f"Saving evaluation metrics to: {metrics_filepath}")
 
-    # --- Load Data ---
+    # --- Load Data --- 
     dataset_filepath = project_root / "data" / f"{full_base}_dataset.csv"
     try:
         data = pd.read_csv(dataset_filepath)
@@ -244,28 +238,21 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
         print(f"Error: Data file not found at '{dataset_filepath}'. Please generate it first.")
         return
 
-    # --- Recreate the Exact Same Test Split ---
+    # --- Prepare Full Dataset for Evaluation 
     target_column = train_settings["target_column"]
     X = data.drop(columns=[target_column])
     y = data[target_column]
-    global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
-    val_ratio = train_settings["validation_set_ratio"]
-    test_ratio = train_settings["test_set_ratio"]
 
-    # This two-step split ensures we get the identical test set that training would use
-    _, X_temp, _, y_temp = train_test_split(
-        X, y, test_size=(val_ratio + test_ratio), random_state=global_seed, stratify=y
-    )
-    relative_test_ratio = test_ratio / (val_ratio + test_ratio)
-    _, X_test, _, y_test = train_test_split(
-        X_temp, y_temp, test_size=relative_test_ratio, random_state=global_seed, stratify=y_temp
+    print(f"Using entire dataset of {len(X)} samples for evaluation.")
+    
+    evaluation_dataset = TabularDataset(X, y)
+    evaluation_loader = DataLoader(
+        dataset=evaluation_dataset,
+        batch_size=hyperparams["batch_size"],
+        shuffle=False
     )
     
-    print(f"Isolated test set of {len(X_test)} samples.")
-    test_dataset = TabularDataset(X_test, y_test)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
-
-    # --- Model Initialisation and Loading State ---
+    # --- Model Initialisation and Loading State 
     ARCH_PARAMS = {"mlp_001": {"hidden_size", "output_size"}}
     valid_arch_keys = ARCH_PARAMS.get(model_name, set())
     model_params = {key: hyperparams[key] for key in hyperparams if key in valid_arch_keys}
@@ -275,20 +262,20 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
 
-    # --- Evaluation on the Test Set ---
+    # --- Evaluation on the Full Dataset ---
     model.eval()
     criterion = nn.BCEWithLogitsLoss()
-    test_loss, all_preds, all_labels = 0.0, [], []
+    eval_loss, all_preds, all_labels = 0.0, [], []
     with torch.no_grad():
-        for features, labels in test_loader:
+        for features, labels in evaluation_loader:
             features, labels = features.to(device), labels.to(device)
             outputs = model(features)
             loss = criterion(outputs, labels)
-            test_loss += loss.item()
+            eval_loss += loss.item()
             all_preds.extend(torch.round(torch.sigmoid(outputs)).cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
-    avg_test_loss = test_loss / len(test_loader)
+    avg_eval_loss = eval_loss / len(evaluation_loader)
     from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
     accuracy = accuracy_score(all_labels, all_preds)
     f1 = f1_score(all_labels, all_preds)
@@ -296,9 +283,9 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
     recall = recall_score(all_labels, all_preds, zero_division=0)
     final_auc = roc_auc_score(all_labels, all_preds)
 
-    # --- Save Metrics ---
+    # --- Save Metrics --- 
     final_metrics = {
-        "Test Loss (BCE)": avg_test_loss, "Accuracy": accuracy, "F1-Score": f1,
+        "Test Loss (BCE)": avg_eval_loss, "Accuracy": accuracy, "F1-Score": f1,
         "Precision": precision, "Recall": recall, "AUC": final_auc
     }
     with open(metrics_filepath, 'w') as f:
@@ -332,3 +319,19 @@ def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_
         evaluate_single_config(trained_model_path, str(data_config), str(optimal_config_path))
 
     print("\nMulti-dataset evaluation complete.")
+
+    # --- Suggest next step: Aggregation ---
+    print("\n" + "="*80)
+    print("Next Step: Aggregate the results from all families")
+    print("="*80 + "\n")
+    print("Use the 'aggregate-all' command to summarize the performance metrics for both")
+    print("the original and perturbed datasets.")
+
+    # The `optimal_config` argument points to the correct, existing training config.
+    # We pass this file directly to the next command.
+    aggregate_command = (
+        f"uv run experiment_manager.py aggregate-all \\\n"
+        f"    --optimal-config {optimal_config}"
+    )
+    print(aggregate_command)
+    print("\n" + "="*80)
