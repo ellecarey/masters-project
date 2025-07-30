@@ -16,6 +16,7 @@ from src.training_module.dataset import TabularDataset
 from torch.utils.data import DataLoader
 from src.training_module.trainer import train_model
 from src.utils.filenames import experiment_name, metrics_filename, model_filename
+from src.utils.plotting_helpers import generate_subtitle_from_config
 
 TRAINING_SEED = 99
 
@@ -26,7 +27,6 @@ def train_single_config(data_config_path: str, training_config_path: str):
     """
     apply_custom_plot_style()
 
-    # highlight-start
     # --- Safeguard: Ensure this is a training dataset ---
     if "_training" not in Path(data_config_path).name:
         print("\nERROR: Invalid dataset for 'train-single'.")
@@ -35,7 +35,6 @@ def train_single_config(data_config_path: str, training_config_path: str):
         print("\nPlease use a data config file with '_training_config.yml' in its name.")
         print("To evaluate your model on seeded datasets, use the 'evaluate-multiseed' command instead.")
         return
-    # highlight-end
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
@@ -162,10 +161,23 @@ def train_single_config(data_config_path: str, training_config_path: str):
         json.dump(final_metrics, f, indent=4)
     print(f"Final metrics saved to: {metrics_filepath}")
 
+    plot_subtitle = generate_subtitle_from_config(data_config)
+
     print("\n--- Generating Final Evaluation Plots ---")
-    output_plot_dir = Path("placeholder")
-    train_utils.plot_training_history(history=history, experiment_name=exp_name, output_dir=output_plot_dir)
-    train_utils.plot_final_metrics(model=trained_model, test_loader=test_loader, device=device, experiment_name=exp_name, output_dir=output_plot_dir)
+    train_utils.plot_training_history(
+        history=history,
+        experiment_name=exp_name,
+        output_dir=Path("placeholder"),
+        subtitle=plot_subtitle  # Pass the new subtitle
+    )
+    train_utils.plot_final_metrics(
+        model=trained_model,
+        test_loader=test_loader,
+        device=device,
+        experiment_name=exp_name,
+        output_dir=Path("placeholder"),
+        subtitle=plot_subtitle  # Pass the new subtitle
+    )
     
     torch.save(trained_model.state_dict(), model_filepath)
     print(f"\nModel state dictionary saved to {model_filepath}")

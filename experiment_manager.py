@@ -1,5 +1,4 @@
 import argparse
-
 from src.data_generator_module.generator_cli import (
     generate_from_config,
     generate_multi_seed,
@@ -13,10 +12,10 @@ from src.training_module.tuning_cli import (
 )
 from src.analysis_module.analysis_cli import (
     aggregate,
-    compare_families
+    compare_families,
+    aggregate_all_families
 )
 
-from src.analysis_module.analysis_cli import aggregate_all_families
 
 def main():
     parser = argparse.ArgumentParser(description="Unified Experiment Workflow Manager")
@@ -33,7 +32,6 @@ def main():
     gen_multi.add_argument("--start-seed", type=int, default=0, help="Starting random seed for evaluation sets. Default: 0")
     gen_multi.add_argument( "--no-training-seed",action="store_true",help="Do NOT generate the dedicated training dataset (seed 99).")
 
-
     pert_multi = subparsers.add_parser("perturb-multiseed", help="Multi-seed perturbation (add perturbation across a family)")
     pert_multi.add_argument("--data-config-base", required=True, type=str, help="Example config file from the family to perturb")
     pert_multi.add_argument("--perturb-config", required=True, type=str, help="Perturbation YAML config")
@@ -42,6 +40,7 @@ def main():
     train_single = subparsers.add_parser("train-single", help="Train a single model on a specific dataset.")
     train_single.add_argument("--data-config", required=True, type=str, help="Path to the specific data config YAML file.")
     train_single.add_argument("--optimal-config", required=True, type=str, help="The optimal config YAML for the training run.")
+
     train_multi = subparsers.add_parser("train-multiseed", help="Multi-seed training")
     train_multi.add_argument("--data-config-base", required=True, type=str, help="Example config file from family for training")
     train_multi.add_argument("--optimal-config", required=True, type=str, help="Optimal config YAML for the run")
@@ -51,7 +50,7 @@ def main():
     eval_multi.add_argument("--trained-model", required=True, type=str, help="Path to the pre-trained model (.pt) file")
     eval_multi.add_argument("--data-config-base", required=True, type=str, help="An example config file from the family to evaluate")
     eval_multi.add_argument("--optimal-config", required=True, type=str, help="The optimal config YAML used to create the model (for architecture info)")
-    
+
     # Aggregation
     agg = subparsers.add_parser("aggregate", help="Aggregate multi-seed results")
     agg.add_argument("--optimal-config", required=True, type=str, help="Path to one of the final optimal config files used for the runs")
@@ -64,7 +63,7 @@ def main():
     comp.add_argument("--original-optimal-config", required=True, type=str, help="Original (unperturbed) optimal config")
     comp.add_argument("--perturbation-tag", required=True, type=str, help="Perturbation tag used in filename for perturbed family")
 
-    # Tuning 
+    # Tuning
     tuneexp = subparsers.add_parser("tune-experiment", help="Launch Optuna hyperparameter tuning job (multi-worker)")
     tuneexp.add_argument("--job", required=True, type=str, help="Job name from configs/experiments.yml")
 
@@ -79,6 +78,7 @@ def main():
     tune_anal.add_argument("--data-config", required=True, type=str)
     tune_anal.add_argument("--base-training-config", required=True, type=str)
 
+
     args = parser.parse_args()
 
     if args.command == "generate":
@@ -87,12 +87,8 @@ def main():
         generate_multi_seed(args.config, num_seeds=args.num_seeds, start_seed=args.start_seed, generate_training_seed=(not args.no_training_seed))
     elif args.command == "perturb-multiseed":
         perturb_multi_seed(args.data_config_base, args.perturb_config)
-    if args.command == "train-single":
+    elif args.command == "train-single":
         train_single_config(args.data_config, args.optimal_config)
-    elif args.command == "train-multiseed":
-        train_multi_seed(args.data_config_base, args.optimal_config)
-    elif args.command == "train-multiseed":
-        train_multi_seed(args.data_config_base, args.optimal_config)
     elif args.command == "train-multiseed":
         train_multi_seed(args.data_config_base, args.optimal_config)
     elif args.command == "evaluate-multiseed":
@@ -115,6 +111,7 @@ def main():
         )
     elif args.command == "tune-analysis":
         run_tuning_analysis(args.data_config, args.base_training_config)
+
 
 if __name__ == "__main__":
     main()

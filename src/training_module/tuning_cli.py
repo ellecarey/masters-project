@@ -26,7 +26,8 @@ import torch.nn as nn
 from src.data_generator_module.utils import find_project_root, create_filename_from_config
 from src.utils.report_paths import extract_family_base
 from src.utils.filenames import model_filename
-    
+from src.utils.plotting_helpers import generate_subtitle_from_config, format_plot_title
+from src.data_generator_module.plotting_style import apply_custom_plot_style
     
 
 def run_hyperparameter_tuning(
@@ -39,6 +40,7 @@ def run_hyperparameter_tuning(
     """
     Run Optuna hyperparameter tuning on a dataset given a search space config.
     """
+    apply_custom_plot_style()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
@@ -310,7 +312,7 @@ def run_tuning_analysis(data_config: str, base_training_config: str):
     Analyse a completed Optuna study, interactively select the optimal trial, and
     generate an optimal training config. Mirrors run_tuning_analysis.py.
     """
-
+    apply_custom_plot_style()
     warnings.filterwarnings("ignore", category=optuna.exceptions.ExperimentalWarning)
 
     # --- Find root, load configs ---
@@ -368,29 +370,54 @@ def run_tuning_analysis(data_config: str, base_training_config: str):
             print("\nSelection cancelled. Exiting.")
             return
 
+
     # --- Visualisations ---
+    plot_subtitle = generate_subtitle_from_config(data_config_dict)
     model_name = tuning_config.get("model_name", "model")
-
-    # Extract family base from dataset_base_name (remove _seed\d+)
-
-    family_base = extract_family_base(dataset_base_name)
-    
-    # Create tuning-specific directory at family level
-    output_plot_dir = project_root / "reports" / "figures" / family_base / f"{model_name}_tuning"
+    family_base_vis = extract_family_base(dataset_base_name)
+    output_plot_dir = project_root / "reports" / "figures" / family_base_vis / f"{model_name}_tuning"
     os.makedirs(output_plot_dir, exist_ok=True)
     print(f"\nSaving plots to: {output_plot_dir}")
+    
+    # Plot Optimisation History
     plt.figure()
-    plot_optimization_history(study, target_name="AUC")
+    # Capture the axes object to modify it directly
+    ax = plot_optimization_history(study, target_name="AUC")
+    # Remove the default title and y-label added by the Optuna function
+    ax.set_title("")
+    ax.set_ylabel("AUC")
+    
+    main_title = "Optimisation History (AUC)"
+    # Combine main title and subtitle with a true newline
+    full_title = f"{main_title}\n{plot_subtitle}"
+    plt.suptitle(full_title, y=0.95) # reduce to reduce whitespace
+    
+    plt.legend(loc='lower right')
+    # Adjust rect to make space for the suptitle
+    plt.tight_layout(rect=[0, 0, 1, 0.92])
     plt.savefig(output_plot_dir / "tuning_optimisation_history_auc.pdf", bbox_inches='tight')
     plt.close()
-
+    
+    # Plot Parameter Importances
     try:
         plt.figure()
-        plot_param_importances(study, target_name="AUC")
+        # Capture the axes object for the second plot
+        ax_params = plot_param_importances(study, target_name="AUC")
+        # Remove the default title and y-label
+        ax_params.set_title("")
+        ax_params.set_ylabel("")
+    
+        main_title = "Hyperparameter Importances"
+        full_title = f"{main_title}\n{plot_subtitle}"
+        plt.suptitle(full_title, y=0.95)
+        # Adjust rect for this plot as well
+        plt.tight_layout(rect=[0, 0.0, 1, 0.92])
         plt.savefig(output_plot_dir / "tuning_param_importances_auc.pdf", bbox_inches='tight')
         plt.close()
     except Exception:
         print("Warning: Could not generate parameter importance plot.")
+
+
 
     # --- Write Final Training Config ---
     def create_and_save_optimal_config(best_params, final_data_config_path, base_training_config_path, tuning_config):

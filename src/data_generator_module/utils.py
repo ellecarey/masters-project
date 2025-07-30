@@ -5,6 +5,7 @@ import yaml
 import random
 import numpy as np
 import re
+from src.utils.plotting_helpers import generate_subtitle_from_config
 
 TRAINING_SEED = 99
 
@@ -106,55 +107,10 @@ def create_filename_from_config(config):
 
 
 def create_plot_title_from_config(config: dict) -> tuple[str, str]:
-    """
-    Generates a human-readable title and subtitle for plots from the config.
-    """
-    try:
-        # Main Title
-        main_title = "Distribution of Generated Features"
-
-        # Subtitle Components
-        ds_settings = config.get("dataset_settings", {})
-        n_samples = ds_settings.get("n_samples", "N/A")
-        n_initial = ds_settings.get("n_initial_features", 0)
-        total_features = n_initial
-
-        # Quantitative Perturbation description
-        pert_settings = config.get("perturbation_settings")
-        if pert_settings and isinstance(pert_settings, list):
-            pert_descs = []
-            for p in pert_settings:
-                feature = p.get('feature', 'N/A')
-                class_label = 'Noise' if p.get('class_label') == 0 else 'Signal'
-                sigma_shift = p.get('sigma_shift', 0.0)
-                pert_descs.append(f"{feature} ({class_label}) by {sigma_shift:+.1f}σ")
-            pert_desc = f"Perturbation: {'; '.join(pert_descs)}"
-        else:
-            pert_desc = "No Perturbations"
-
-        # Separation calculation
-        class_config = config.get("create_feature_based_signal_noise_classification", {})
-        signal_features = class_config.get("signal_features", {})
-        noise_features = class_config.get("noise_features", {})
-        
-        separations = [
-            abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0))
-            for f in signal_features if f in noise_features
-        ]
-        avg_separation = sum(separations) / len(separations) if separations else 0.0
-        separation_desc = f"Avg. Separation: {avg_separation:.2f}"
-
-        # Assemble the subtitle
-        subtitle = (
-            f"Dataset: {n_samples:,} Samples, {total_features} Features | "
-            f"{pert_desc} | {separation_desc}"
-        )
-
-        return main_title, subtitle
-    except Exception:
-        # Fallback if the config structure is unexpected
-        return "Feature Distribution", "Configuration details unavailable"
-
+    """Generates a main title and subtitle using the new centralized helper."""
+    main_title = "Distribution of Generated Features"
+    subtitle = generate_subtitle_from_config(config)
+    return main_title, subtitle
 
 def rename_config_file(original_config_path, experiment_name):
     """

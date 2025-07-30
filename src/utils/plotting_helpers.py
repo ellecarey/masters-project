@@ -3,6 +3,52 @@ import textwrap
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
+def generate_subtitle_from_config(config: dict) -> str:
+    """
+    Generates a detailed, human-readable subtitle from a configuration dictionary.
+    """
+    try:
+        ds_settings = config.get("dataset_settings", {})
+        n_samples = ds_settings.get("n_samples", "N/A")
+
+        class_config = config.get("create_feature_based_signal_noise_classification", {})
+        feature_types = class_config.get("feature_types", {})
+        total_features = len(feature_types)
+        
+        continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
+        discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
+        feature_desc = f"{total_features} Features ({continuous_count} Cont, {discrete_count} Disc)"
+
+        pert_settings = config.get("perturbation_settings")
+        if pert_settings and isinstance(pert_settings, list) and pert_settings:
+            pert_descs = []
+            for p in pert_settings:
+                feature = p.get('feature', 'N/A')
+                class_label = 'Noise' if p.get('class_label') == 0 else 'Signal'
+                sigma_shift = p.get('sigma_shift', 0.0)
+                pert_descs.append(f"{feature} ({class_label}) by {sigma_shift:+.1f}σ")
+            pert_desc = f"Perturbation: {'; '.join(pert_descs)}"
+        else:
+            pert_desc = "No Perturbations"
+
+        signal_features = class_config.get("signal_features", {})
+        noise_features = class_config.get("noise_features", {})
+        separations = [
+            abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0))
+            for f in signal_features if f in noise_features
+        ]
+        avg_separation = sum(separations) / len(separations) if separations else 0.0
+        separation_desc = f"Avg. Separation: {avg_separation:.2f}"
+
+        subtitle = (
+            f"Dataset: {n_samples:,} Samples, {feature_desc}\n"
+            f"{pert_desc} | {separation_desc}"
+        )
+        return subtitle
+    except Exception:
+        return "Configuration details unavailable"
+
+    
 def bounded_yerr(mean, spread, lo=0.0, hi=1.0):
     """
     Return asymmetric y-err that never crosses [lo, hi] bounds.

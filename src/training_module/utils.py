@@ -199,17 +199,21 @@ def rename_config_file(original_config_path, experiment_name):
         print(f"Warning: Could not rename config file: {e}")
         return str(config_path)
 
-def plot_training_history(history, experiment_name, output_dir):
+def plot_training_history(history, experiment_name, output_dir, subtitle: str = None):
     """
     Plots the training and validation loss and accuracy over epochs,
     saving the result to the specified output directory.
     """
     epochs = range(1, len(history['train_loss']) + 1)
-    
-    # The figsize and suptitle fontsize arguments are removed to inherit from rcParams.
+    # Create a figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True)
-    title = format_plot_title("Training History for", experiment_name)
-    fig.suptitle(title)
+
+    # Use the detailed subtitle if provided, otherwise fall back to the experiment name.
+    final_subtitle = subtitle if subtitle else experiment_name
+    main_title = "Training and Validation History"
+    # Combine titles into a single, two-line suptitle for true centering
+    full_title = f"{main_title}\n{final_subtitle}"
+    plt.suptitle(full_title, y=0.97)
 
     # Plot Loss
     ax1.plot(epochs, history['train_loss'], 'o-', label='Training Loss')
@@ -227,10 +231,9 @@ def plot_training_history(history, experiment_name, output_dir):
     ax2.set_title('Model Accuracy Over Epochs')
     ax2.legend()
     ax2.grid(True, linestyle='--', alpha=0.6)
+    
     apply_decimal_formatters(ax1, precision=3)
     apply_decimal_formatters(ax2, precision=3)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    
     
     subfolder = re.sub(r'_mlp_.*$', '', experiment_name)
     
@@ -240,16 +243,18 @@ def plot_training_history(history, experiment_name, output_dir):
         subfolder=subfolder,
         filename="training_history.pdf"
     )
-
-    plt.savefig(save_path)
+    
+    # Adjust the layout to be tight
+    plt.tight_layout(rect=[0, 0.0, 1, 0.95])
+    plt.savefig(save_path, bbox_inches='tight')
     plt.close()
     print(f"Saved training history plot to: {save_path}")
 
 
-def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
+def plot_final_metrics(model, test_loader, device, experiment_name, output_dir, subtitle: str = None):
     """
     Evaluates the final model on the test set and plots the confusion matrix
-    and ROC curve inside the specified output directory.
+    and ROC curve inside the specified output directory, with non-overlapping titles.
     """
     model.eval()
     all_labels = []
@@ -261,19 +266,23 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
             scores = torch.sigmoid(outputs)
             all_scores.extend(scores.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
-    
     all_preds = np.round(all_scores)
-    
+
     subfolder = re.sub(r'_mlp_.*$', '', experiment_name)
-    
-    # Plot Confusion Matrix
+    final_subtitle = subtitle if subtitle is not None else experiment_name
+
+    # --- Plot Confusion Matrix ---
     cm = confusion_matrix(all_labels, all_preds)
     plt.figure()
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Noise', 'Signal'], yticklabels=['Noise', 'Signal'])
-    cm_title = format_plot_title("Confusion Matrix for", experiment_name, sub_width=60)
-    plt.title(cm_title)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Noise', 'Signal'], yticklabels=['Noise', 'Signal'], annot_kws={"size": 16} )
+    
+    # Combine titles into a single, centered suptitle
+    full_cm_title = f"Confusion Matrix\n{final_subtitle}"
+    plt.suptitle(full_cm_title, y=0.97)
     plt.ylabel('Actual Class')
     plt.xlabel('Predicted Class')
+
+    plt.tight_layout(rect=[0, 0.0, 1, 0.95])
 
     cm_save_path = experiment_family_path(
         full_experiment_name=experiment_name,
@@ -285,7 +294,7 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     plt.close()
     print(f"Saved confusion matrix to: {cm_save_path}")
 
-    # Plot ROC Curve
+    # --- Plot ROC Curve ---
     fpr, tpr, _ = roc_curve(all_labels, all_scores)
     roc_auc = auc(fpr, tpr)
     plt.figure()
@@ -295,9 +304,12 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir):
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    roc_title = format_plot_title("Receiver Operating Characteristic (ROC)", experiment_name, sub_width=60)
-    plt.title(roc_title)
     plt.legend(loc="lower right")
+
+    # Combine titles for the ROC plot
+    full_roc_title = f"Receiver Operating Characteristic (ROC)\n{final_subtitle}"
+    plt.suptitle(full_roc_title, y=0.97)
+    plt.tight_layout(rect=[0, 0.0, 1, 0.95])
 
     roc_save_path = experiment_family_path(
         full_experiment_name=experiment_name,
