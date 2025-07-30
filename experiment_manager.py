@@ -5,7 +5,7 @@ from src.data_generator_module.generator_cli import (
     generate_multi_seed,
     perturb_multi_seed
 )
-from src.training_module.training_cli import train_multi_seed
+from src.training_module.training_cli import train_multi_seed, evaluate_multi_seed, train_single_config
 from src.training_module.tuning_cli import (
     run_experiments,
     run_hyperparameter_tuning,
@@ -37,10 +37,19 @@ def main():
     pert_multi.add_argument("--perturb-config", required=True, type=str, help="Perturbation YAML config")
 
     # Training
+    train_single = subparsers.add_parser("train-single", help="Train a single model on a specific dataset.")
+    train_single.add_argument("--data-config", required=True, type=str, help="Path to the specific data config YAML file.")
+    train_single.add_argument("--optimal-config", required=True, type=str, help="The optimal config YAML for the training run.")
     train_multi = subparsers.add_parser("train-multiseed", help="Multi-seed training")
     train_multi.add_argument("--data-config-base", required=True, type=str, help="Example config file from family for training")
     train_multi.add_argument("--optimal-config", required=True, type=str, help="Optimal config YAML for the run")
 
+    # Evaluation
+    eval_multi = subparsers.add_parser("evaluate-multiseed", help="Evaluate one model on a multi-seed dataset family")
+    eval_multi.add_argument("--trained-model", required=True, type=str, help="Path to the pre-trained model (.pt) file")
+    eval_multi.add_argument("--data-config-base", required=True, type=str, help="An example config file from the family to evaluate")
+    eval_multi.add_argument("--optimal-config", required=True, type=str, help="The optimal config YAML used to create the model (for architecture info)")
+    
     # Aggregation
     agg = subparsers.add_parser("aggregate", help="Aggregate multi-seed results")
     agg.add_argument("--optimal-config", required=True, type=str, help="Path to one of the final optimal config files used for the runs")
@@ -76,8 +85,16 @@ def main():
         generate_multi_seed(args.config, num_seeds=args.num_seeds, start_seed=args.start_seed)
     elif args.command == "perturb-multiseed":
         perturb_multi_seed(args.data_config_base, args.perturb_config)
+    if args.command == "train-single":
+        train_single_config(args.data_config, args.optimal_config)
     elif args.command == "train-multiseed":
         train_multi_seed(args.data_config_base, args.optimal_config)
+    elif args.command == "train-multiseed":
+        train_multi_seed(args.data_config_base, args.optimal_config)
+    elif args.command == "train-multiseed":
+        train_multi_seed(args.data_config_base, args.optimal_config)
+    elif args.command == "evaluate-multiseed":
+        evaluate_multi_seed(args.trained_model, args.data_config_base, args.optimal_config)
     elif args.command == "aggregate":
         aggregate(args.optimal_config)
     elif args.command == "aggregate-all":

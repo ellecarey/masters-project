@@ -1,7 +1,3 @@
-"""
-Utility functions for the data generator module.
-"""
-
 import os
 import shutil
 from pathlib import Path
@@ -54,8 +50,6 @@ def get_project_paths():
     }
     return paths
 
-
-# In src/data_generator_module/utils.py
 
 def create_filename_from_config(config):
     """
@@ -118,39 +112,41 @@ def create_plot_title_from_config(config: dict) -> tuple[str, str]:
         # Subtitle Components
         ds_settings = config.get("dataset_settings", {})
         n_samples = ds_settings.get("n_samples", "N/A")
-
-        # Calculate total features
         n_initial = ds_settings.get("n_initial_features", 0)
-        n_added = config.get("add_features", {}).get("n_new_features", 0)
-        total_features = n_initial + n_added
+        total_features = n_initial
 
-        # Perturbation description
-        pert_settings = config.get("perturbation", {})
-        pert_type = pert_settings.get("perturbation_type", "none")
-        if pert_type != "none":
-            pert_scale = pert_settings.get("scale", 0)
-            pert_desc = f"Perturbation: {pert_type.capitalize()} (Scale: {pert_scale})"
+        # Quantitative Perturbation description
+        pert_settings = config.get("perturbation_settings")
+        if pert_settings and isinstance(pert_settings, list):
+            pert_descs = []
+            for p in pert_settings:
+                feature = p.get('feature', 'N/A')
+                class_label = 'Noise' if p.get('class_label') == 0 else 'Signal'
+                sigma_shift = p.get('sigma_shift', 0.0)
+                pert_descs.append(f"{feature} ({class_label}) by {sigma_shift:+.1f}σ")
+            pert_desc = f"Perturbation: {'; '.join(pert_descs)}"
         else:
             pert_desc = "No Perturbations"
 
-        # Target variable description 
-        if "create_feature_based_signal_noise_classification" in config:
-            target_desc = "Target: Feature-based Classification"
-        else:
-            func_type = config.get("create_target", {}).get("function_type", "N/A")
-            if func_type == "signal_noise":
-                target_desc = "Target: Signal/Noise Classification"
-            else:
-                target_desc = f"Target: {func_type.capitalize()} Relationship"
+        # Separation calculation
+        class_config = config.get("create_feature_based_signal_noise_classification", {})
+        signal_features = class_config.get("signal_features", {})
+        noise_features = class_config.get("noise_features", {})
+        
+        separations = [
+            abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0))
+            for f in signal_features if f in noise_features
+        ]
+        avg_separation = sum(separations) / len(separations) if separations else 0.0
+        separation_desc = f"Avg. Separation: {avg_separation:.2f}"
 
         # Assemble the subtitle
         subtitle = (
             f"Dataset: {n_samples:,} Samples, {total_features} Features | "
-            f"{pert_desc} | {target_desc}"
+            f"{pert_desc} | {separation_desc}"
         )
 
         return main_title, subtitle
-
     except Exception:
         # Fallback if the config structure is unexpected
         return "Feature Distribution", "Configuration details unavailable"

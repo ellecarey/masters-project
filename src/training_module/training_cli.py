@@ -5,13 +5,15 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 import torch.nn as nn
 import re
+
 from src.data_generator_module import utils as data_utils
 from src.data_generator_module.plotting_style import apply_custom_plot_style
+from src.data_generator_module.utils import find_project_root 
 from src.training_module import utils as train_utils
 from src.training_module.models import get_model
 from src.training_module.dataset import TabularDataset
+from torch.utils.data import DataLoader
 from src.training_module.trainer import train_model
-
 from src.utils.filenames import experiment_name, metrics_filename, model_filename
 
 def train_single_config(data_config_path: str, training_config_path: str):
@@ -177,8 +179,6 @@ def train_single_config(data_config_path: str, training_config_path: str):
     print(f"\nModel state dictionary saved to {model_filepath}")
 
 
-
-
 def train_multi_seed(data_config_base: str, optimal_config: str):
     """
     Train the same optimal config over a multi-seed dataset family.
@@ -197,3 +197,132 @@ def train_multi_seed(data_config_base: str, optimal_config: str):
         print(f"Training on: {data_config.name}")
         train_single_config(str(data_config), str(optimal_config_path))
     print("\nMulti-seed training complete.")
+
+
+def evaluate_single_config(model_path: str, data_config_path: str, training_config_path: str):
+    """
+    Evaluate a pre-trained model on a single dataset's test split.
+    This will overwrite any existing metrics file for this dataset.
+    """
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"--- Evaluating model {model_path} on data from {data_config_path} ---")
+
+    # --- Load Configurations ---
+    try:
+        data_config = data_utils.load_yaml_config(data_config_path)
+        training_config = data_utils.load_yaml_config(training_config_path)
+    except FileNotFoundError as e:
+        print(f"Error: Configuration file not found - {e}")
+        return
+
+    train_settings = training_config["training_settings"]
+    model_name = train_settings["model_name"]
+    hyperparams = train_settings["hyperparameters"]
+
+    # --- Derive Experiment Name for Output Metrics ---
+    full_base = data_utils.create_filename_from_config(data_config)
+    regex = r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)$"
+    m = re.match(regex, full_base)
+    if not m:
+        raise ValueError(f"Could not parse base/pert/seed from {full_base}")
+    base, pert_tag, seed_str = m.group("base"), m.group("pert"), m.group("seed")
+    seed = int(seed_str)
+    
+    project_root = Path(data_utils.find_project_root())
+    model_output_dir = project_root / train_settings["model_output_dir"]
+    model_output_dir.mkdir(parents=True, exist_ok=True)
+    metrics_filepath = model_output_dir / metrics_filename(base, model_name, seed=seed, perturbation_tag=pert_tag)
+    print(f"Saving evaluation metrics to: {metrics_filepath}")
+
+    # --- Load Data ---
+    dataset_filepath = project_root / "data" / f"{full_base}_dataset.csv"
+    try:
+        data = pd.read_csv(dataset_filepath)
+    except FileNotFoundError:
+        print(f"Error: Data file not found at '{dataset_filepath}'. Please generate it first.")
+        return
+
+    # --- Recreate the Exact Same Test Split ---
+    target_column = train_settings["target_column"]
+    X = data.drop(columns=[target_column])
+    y = data[target_column]
+    global_seed = data_config.get("global_settings", {}).get("random_seed", 42)
+    val_ratio = train_settings["validation_set_ratio"]
+    test_ratio = train_settings["test_set_ratio"]
+
+    # This two-step split ensures we get the identical test set that training would use
+    _, X_temp, _, y_temp = train_test_split(
+        X, y, test_size=(val_ratio + test_ratio), random_state=global_seed, stratify=y
+    )
+    relative_test_ratio = test_ratio / (val_ratio + test_ratio)
+    _, X_test, _, y_test = train_test_split(
+        X_temp, y_temp, test_size=relative_test_ratio, random_state=global_seed, stratify=y_temp
+    )
+    
+    print(f"Isolated test set of {len(X_test)} samples.")
+    test_dataset = TabularDataset(X_test, y_test)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
+
+    # --- Model Initialisation and Loading State ---
+    ARCH_PARAMS = {"mlp_001": {"hidden_size", "output_size"}}
+    valid_arch_keys = ARCH_PARAMS.get(model_name, set())
+    model_params = {key: hyperparams[key] for key in hyperparams if key in valid_arch_keys}
+    model_params["input_size"] = X.shape[1]
+    
+    model = get_model(model_name, model_params)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.to(device)
+
+    # --- Evaluation on the Test Set ---
+    model.eval()
+    criterion = nn.BCEWithLogitsLoss()
+    test_loss, all_preds, all_labels = 0.0, [], []
+    with torch.no_grad():
+        for features, labels in test_loader:
+            features, labels = features.to(device), labels.to(device)
+            outputs = model(features)
+            loss = criterion(outputs, labels)
+            test_loss += loss.item()
+            all_preds.extend(torch.round(torch.sigmoid(outputs)).cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    avg_test_loss = test_loss / len(test_loader)
+    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+    accuracy = accuracy_score(all_labels, all_preds)
+    f1 = f1_score(all_labels, all_preds)
+    precision = precision_score(all_labels, all_preds, zero_division=0)
+    recall = recall_score(all_labels, all_preds, zero_division=0)
+    final_auc = roc_auc_score(all_labels, all_preds)
+
+    # --- Save Metrics ---
+    final_metrics = {
+        "Test Loss (BCE)": avg_test_loss, "Accuracy": accuracy, "F1-Score": f1,
+        "Precision": precision, "Recall": recall, "AUC": final_auc
+    }
+    with open(metrics_filepath, 'w') as f:
+        json.dump(final_metrics, f, indent=4)
+    print(f"Evaluation metrics successfully saved to: {metrics_filepath}\n")
+
+def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_config: str):
+    """
+    Evaluates a single pre-trained model over a multi-seed dataset family.
+    """
+    project_root = Path(find_project_root())
+    base_data_config_path = project_root / data_config_base
+    optimal_config_path = project_root / optimal_config
+    
+    dataset_family_name = base_data_config_path.stem.replace('_config', '').split('_seed')[0]
+    data_config_dir = project_root / "configs" / "data_generation"
+    
+    all_data_configs = sorted(list(data_config_dir.glob(f"{dataset_family_name}*_config.yml")))
+    
+    if not all_data_configs:
+        print(f"Error: No data configs found for family '{dataset_family_name}' in '{data_config_dir}'")
+        return
+
+    print(f"\nFound {len(all_data_configs)} datasets to evaluate using model '{trained_model_path}'.")
+    
+    for data_config in all_data_configs:
+        evaluate_single_config(trained_model_path, str(data_config), str(optimal_config_path))
+
+    print("\nMulti-dataset evaluation complete.")
