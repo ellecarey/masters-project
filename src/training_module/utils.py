@@ -199,63 +199,51 @@ def rename_config_file(original_config_path, experiment_name):
         print(f"Warning: Could not rename config file: {e}")
         return str(config_path)
 
-def plot_training_history(history, experiment_name, output_dir, subtitle: str = None):
+def plot_training_history(history: dict, experiment_name: str, output_dir: str, subtitle: str = None):
     """
-    Plots the training and validation loss and accuracy over epochs,
-    saving the result to the specified output directory.
+    Plots training and validation loss and accuracy from a history dictionary.
+    
     """
-    epochs = range(1, len(history['train_loss']) + 1)
-    # Create a figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True)
 
-    # Use the detailed subtitle if provided, otherwise fall back to the experiment name.
-    final_subtitle = subtitle if subtitle else experiment_name
-    main_title = "Training and Validation History"
-    # Combine titles into a single, two-line suptitle for true centering
-    full_title = f"{main_title}\n{final_subtitle}"
-    plt.suptitle(full_title, y=0.97)
+    fig, (ax1, ax2) = plt.subplots(1, 2)
 
-    # Plot Loss
-    ax1.plot(epochs, history['train_loss'], 'o-', label='Training Loss')
-    ax1.plot(epochs, history['val_loss'], 'o-', label='Validation Loss')
-    ax1.set_ylabel('Loss (BCE)')
-    ax1.set_title('Model Loss Over Epochs')
+    # Plotting Loss
+    ax1.plot(history['train_loss'], label='Training Loss')
+    ax1.plot(history['val_loss'], label='Validation Loss')
+    ax1.set_title('Loss During Training')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
     ax1.legend()
-    ax1.grid(True, linestyle='--', alpha=0.6)
+    ax1.grid(True)
 
-    # Plot Accuracy
-    ax2.plot(epochs, history['train_acc'], 'o-', label='Training Accuracy')
-    ax2.plot(epochs, history['val_acc'], 'o-', label='Validation Accuracy')
-    ax2.set_ylabel('Accuracy')
+    # Plotting Accuracy
+    ax2.plot(history['train_acc_epoch_end'], label='Training Accuracy')
+    ax2.plot(history['val_acc'], label='Validation Accuracy')
+    ax2.set_title('Accuracy During Training')
     ax2.set_xlabel('Epoch')
-    ax2.set_title('Model Accuracy Over Epochs')
+    ax2.set_ylabel('Accuracy')
     ax2.legend()
-    ax2.grid(True, linestyle='--', alpha=0.6)
-    
-    apply_decimal_formatters(ax1, precision=3)
-    apply_decimal_formatters(ax2, precision=3)
-    
-    subfolder = re.sub(r'_mlp_.*$', '', experiment_name)
-    
-    save_path = experiment_family_path(
-        full_experiment_name=experiment_name,
-        art_type="figure",
-        subfolder=subfolder,
-        filename="training_history.pdf"
-    )
-    
-    # Adjust the layout to be tight
-    plt.tight_layout(rect=[0, 0.0, 1, 0.95])
+    ax2.grid(True)
+
+    if subtitle:
+        fig.suptitle(subtitle)
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    else:
+        plt.tight_layout()
+
+    save_path = os.path.join(output_dir, f"{experiment_name}.pdf")
     plt.savefig(save_path, bbox_inches='tight')
     plt.close()
+
     print(f"Saved training history plot to: {save_path}")
 
 
-def plot_final_metrics(model, test_loader, device, experiment_name, output_dir, subtitle: str = None):
+
+def plot_final_metrics(model, test_loader, device, model_name: str, trial_number: int, output_dir: str, subtitle: str = None):
     """
-    Evaluates the final model on the test set and plots the confusion matrix
-    and ROC curve inside the specified output directory, with non-overlapping titles.
+    Generates and saves ROC curve and confusion matrix plots with consistent naming.
     """
+    model.to(device)
     model.eval()
     all_labels = []
     all_scores = []
@@ -263,60 +251,161 @@ def plot_final_metrics(model, test_loader, device, experiment_name, output_dir, 
         for features, labels in test_loader:
             features = features.to(device)
             outputs = model(features)
-            scores = torch.sigmoid(outputs)
-            all_scores.extend(scores.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-    all_preds = np.round(all_scores)
+            scores = torch.sigmoid(outputs).cpu().numpy()
+            all_scores.extend(scores.flatten())
+            all_labels.extend(labels.cpu().numpy().flatten())
 
-    subfolder = re.sub(r'_mlp_.*$', '', experiment_name)
-    final_subtitle = subtitle if subtitle is not None else experiment_name
-
-    # --- Plot Confusion Matrix ---
-    cm = confusion_matrix(all_labels, all_preds)
-    plt.figure()
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Noise', 'Signal'], yticklabels=['Noise', 'Signal'], annot_kws={"size": 16} )
-    
-    # Combine titles into a single, centered suptitle
-    full_cm_title = f"Confusion Matrix\n{final_subtitle}"
-    plt.suptitle(full_cm_title, y=0.97)
-    plt.ylabel('Actual Class')
-    plt.xlabel('Predicted Class')
-
-    plt.tight_layout(rect=[0, 0.0, 1, 0.95])
-
-    cm_save_path = experiment_family_path(
-        full_experiment_name=experiment_name,
-        art_type="figure",
-        subfolder=subfolder,
-        filename="confusion_matrix.pdf"
-    )
-    plt.savefig(cm_save_path, bbox_inches='tight')
-    plt.close()
-    print(f"Saved confusion matrix to: {cm_save_path}")
-
-    # --- Plot ROC Curve ---
+    # --- ROC Curve ---
     fpr, tpr, _ = roc_curve(all_labels, all_scores)
     roc_auc = auc(fpr, tpr)
     plt.figure()
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.4f})')
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC) Curve')
     plt.legend(loc="lower right")
-
-    # Combine titles for the ROC plot
-    full_roc_title = f"Receiver Operating Characteristic (ROC)\n{final_subtitle}"
-    plt.suptitle(full_roc_title, y=0.97)
-    plt.tight_layout(rect=[0, 0.0, 1, 0.95])
-
-    roc_save_path = experiment_family_path(
-        full_experiment_name=experiment_name,
-        art_type="figure",
-        subfolder=subfolder,
-        filename="roc_curve.pdf"
-    )
+    if subtitle:
+        plt.suptitle(subtitle, y=0.98)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    
+    roc_save_path = os.path.join(output_dir, f"{model_name}_roc_curve_trial{trial_number}.pdf")
     plt.savefig(roc_save_path, bbox_inches='tight')
     plt.close()
-    print(f"Saved ROC curve to: {roc_save_path}")
+
+    # --- Confusion Matrix ---
+    predictions = [1 if score > 0.5 else 0 for score in all_scores]
+    cm = confusion_matrix(all_labels, predictions)
+    plt.figure()
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Predicted Negative', 'Predicted Positive'], yticklabels=['Actual Negative', 'Actual Positive'])
+    plt.ylabel('Actual Label')
+    plt.xlabel('Predicted Label')
+    plt.title('Confusion Matrix')
+    if subtitle:
+        plt.suptitle(subtitle, y=0.98)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    cm_save_path = os.path.join(output_dir, f"{model_name}_confusion_matrix_trial{trial_number}.pdf")
+    plt.savefig(cm_save_path, bbox_inches='tight')
+    plt.close()
+
+def plot_combined_training_histories(candidate_info: list, output_dir: str, model_name: str, subtitle: str = None):
+    """
+    Plots training histories with fully adaptive, padded axes for maximum readability.
+    Each subplot scales independently to show its own training dynamics clearly.
+    """
+    if not candidate_info:
+        return
+
+    num_candidates = len(candidate_info)
+    # Each subplot will have fully independent axes for maximum clarity.
+    fig, axes = plt.subplots(
+        num_candidates, 2,
+        figsize=(16, 5 * num_candidates),
+        sharex=False, # Independent x-axes
+        sharey=False, # Independent y-axes
+        squeeze=False
+    )
+
+    for i, info in enumerate(candidate_info):
+        history = info.get('history', {})
+        ax_loss = axes[i, 0]
+        ax_acc = axes[i, 1]
+
+        # --- Plot Titles (working correctly) ---
+        rank = info.get('rank', 'N/A')
+        trial_number = info.get('trial_number', 'N/A')
+        training_time = info.get('training_time', 'N/A')
+        final_val_loss = history.get('val_loss', [float('nan')])[-1]
+        final_val_acc = history.get('val_acc', [float('nan')])[-1]
+        candidate_title = (
+            f"Candidate {rank} (Trial #{trial_number}) | Time: {training_time}s\n"
+            f"Final Val Loss: {final_val_loss:.4f} | Final Val Acc: {final_val_acc:.4f}"
+        )
+        ax_loss.set_title(candidate_title, loc='left', pad=10)
+        ax_acc.set_title("Accuracy Curves", loc='left', pad=10)
+        ax_loss.set_ylabel("Loss")
+        ax_acc.set_ylabel("Accuracy")
+
+        # --- Plotting Data ---
+        train_loss = history.get('train_loss', [])
+        val_loss = history.get('val_loss', [])
+        ax_loss.plot(train_loss, label='Train Loss', color='C0')
+        ax_loss.plot(val_loss, label='Validation Loss', color='C1')
+        ax_loss.legend()
+        ax_loss.grid(True)
+
+        train_acc = history.get('train_acc_epoch_end', [])
+        val_acc = history.get('val_acc', [])
+        ax_acc.plot(train_acc, label='Train Accuracy', color='C0')
+        ax_acc.plot(val_acc, label='Validation Accuracy', color='C1')
+        ax_acc.legend()
+        ax_acc.grid(True)
+
+        # --- MODIFICATION: Adaptive and Padded Axis Limits ---
+
+        # 1. X-Axis Limits (for both loss and accuracy plots)
+        num_epochs = len(train_loss)
+        if num_epochs > 1:
+            # Add a small buffer on both sides of the x-axis
+            x_buffer = max(1, num_epochs * 0.05)
+            ax_loss.set_xlim(-x_buffer, num_epochs - 1 + x_buffer)
+            ax_acc.set_xlim(-x_buffer, num_epochs - 1 + x_buffer)
+        else:
+            ax_loss.set_xlim(-0.5, 1.5)
+            ax_acc.set_xlim(-0.5, 1.5)
+
+        # --- Integer x-axis ticks for epoch labels ---
+        if num_epochs > 0:
+            # Set x-axis ticks to be integers only
+            ax_loss.set_xticks(range(0, num_epochs, max(1, num_epochs // 10)))
+            ax_acc.set_xticks(range(0, num_epochs, max(1, num_epochs // 10)))
+            
+            # Force integer formatting for x-axis labels
+            ax_loss.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
+            ax_acc.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
+
+        # 2. Y-Axis Limits for Loss Plot
+        all_losses = train_loss + val_loss
+        if all_losses:
+            y_max = np.max(all_losses)
+            # Start at 0 and add 5% padding to the top
+            ax_loss.set_ylim(bottom=0, top=y_max * 1.1)
+
+        all_accs = train_acc + val_acc
+        if all_accs:
+            y_min, y_max = np.min(all_accs), np.max(all_accs)
+            y_range = y_max - y_min
+            
+            # Same logic as loss: start from reasonable minimum, scale to data + padding
+            if y_range > 0:
+                # Use the minimum accuracy as the base (like loss uses 0)
+                # Add small buffer below and 10% padding above (same as loss)
+                padding_below = min(0.02, y_range * 0.1)  # Small buffer below, max 2%
+                lower_bound = max(0.0, y_min - padding_below)
+                upper_bound = y_max * 1.1  # Same 10% padding as loss plots
+                ax_acc.set_ylim(lower_bound, min(upper_bound, 1.01))  # Cap at reasonable max
+            else:
+                # Fallback for flat lines
+                center = y_min
+                ax_acc.set_ylim(max(0.0, center - 0.02), min(center + 0.02, 1.05))
+        else:
+            ax_acc.set_ylim(0.0, 1.05)  # Standard fallback
+
+    # --- Final Touches (unchanged) ---
+    if num_candidates > 0:
+        axes[-1, 0].set_xlabel("Epoch")
+        axes[-1, 1].set_xlabel("Epoch")
+
+    if subtitle:
+        main_title = "Combined Training History for Top Candidates"
+        fig.suptitle(f"{main_title}\n{subtitle}")
+    else:
+        fig.suptitle("Combined Training History for Top Candidates")
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    save_path = os.path.join(output_dir, f"{model_name}_combined_training_history.pdf")
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    print(f"Saved combined training history plot with fully adaptive axes to: {save_path}")

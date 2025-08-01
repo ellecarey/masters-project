@@ -1,8 +1,12 @@
+# experiment_manager.py
+
 import argparse
+import os
+import torch.multiprocessing as mp
 from src.data_generator_module.generator_cli import (
     generate_from_config,
     generate_multi_seed,
-    perturb_multi_seed
+    perturb_multi_seed,
 )
 from src.training_module.training_cli import train_multi_seed, evaluate_multi_seed, train_single_config
 from src.training_module.tuning_cli import (
@@ -10,17 +14,36 @@ from src.training_module.tuning_cli import (
     run_hyperparameter_tuning,
     run_tuning_analysis,
 )
+from src.analysis_module.global_tracker import generate_global_tracking_sheet
 from src.analysis_module.analysis_cli import (
     aggregate,
-    compare_families,
     aggregate_all_families
 )
+from src.analysis_module.comparison import compare_families
 
+
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
 
 def main():
+    """
+    Main function to parse arguments and execute the corresponding workflow command.
+    """
+    # Set the multiprocessing start method to 'spawn' for CUDA compatibility.
+    # This must be done at the beginning of the main execution block.
+    try:
+        mp.set_start_method('spawn', force=True)
+    except RuntimeError:
+        # The start method can only be set once. If it's already set, we can ignore the error.
+        pass
+
     parser = argparse.ArgumentParser(description="Unified Experiment Workflow Manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # --- CLI command definitions ---
     # Data generation
     gen = subparsers.add_parser("generate", help="Generate dataset from config")
     gen.add_argument("--config", required=True, type=str, help="Dataset config YAML")
@@ -77,7 +100,10 @@ def main():
     tune_anal = subparsers.add_parser("tune-analysis", help="Analyse/finalise hyperparameter tuning results")
     tune_anal.add_argument("--data-config", required=True, type=str)
     tune_anal.add_argument("--base-training-config", required=True, type=str)
+    tune_anal.add_argument("--sample-fraction", type=float, default=0.1, help="The fraction of data used during tuning, for result reproducibility.")
 
+    # Global Tracking
+    track = subparsers.add_parser("track-studies", help="Generate a global spreadsheet tracking all experiment families.")
 
     args = parser.parse_args()
 
@@ -97,6 +123,8 @@ def main():
         aggregate(args.optimal_config)
     elif args.command == "aggregate-all":
         aggregate_all_families(args.optimal_config)
+    elif args.command == "track-studies":
+        generate_global_tracking_sheet()
     elif args.command == "compare-families":
         compare_families(args.original_optimal_config, args.perturbation_tag)
     elif args.command == "tune-experiment":
@@ -110,8 +138,7 @@ def main():
             args.n_trials
         )
     elif args.command == "tune-analysis":
-        run_tuning_analysis(args.data_config, args.base_training_config)
-
+        run_tuning_analysis(args.data_config, args.base_training_config, args.sample_fraction)
 
 if __name__ == "__main__":
     main()

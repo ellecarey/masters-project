@@ -34,6 +34,7 @@ def apply_custom_plot_style():
 
     # --- General Plot Styling (Preserved from original) ---
     params = {
+        "font.size": 12,  # Set a base font size for text elements like annotations
         "ytick.color": "black",
         "xtick.color": "black",
         "axes.labelcolor": "black",
