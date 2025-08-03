@@ -1,0 +1,49 @@
+create_feature_based_signal_noise_classification:
+  feature_types:
+    feature_0: continuous
+    feature_1: continuous
+    feature_2: continuous
+    feature_3: continuous
+    feature_4: continuous
+  noise_features:
+    feature_0:
+      mean: 2.0
+      std: 2.8
+    feature_1:
+      mean: 2.5
+      std: 2.5
+    feature_2:
+      mean: 2.0
+      std: 3.0
+    feature_3:
+      mean: 3.0
+      std: 2.0
+    feature_4:
+      mean: 1.0
+      std: 1.8
+  signal_features:
+    feature_0:
+      mean: 3.0
+      std: 2.0
+    feature_1:
+      mean: 1.0
+      std: 3.5
+    feature_2:
+      mean: 3.5
+      std: 1.5
+    feature_3:
+      mean: -2.0
+      std: 2.5
+    feature_4:
+      mean: 2.5
+      std: 1.0
+dataset_settings:
+  continuous_decimal_places: 4
+  n_initial_features: 5
+  n_samples: 1000000
+global_settings:
+  random_seed: 7
+visualisation:
+  max_features_to_show: 5
+  n_bins: 25
+  save_to_dir: reports/figures/

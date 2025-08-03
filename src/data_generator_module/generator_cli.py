@@ -53,6 +53,7 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
         n_samples=dataset_settings["n_samples"],
         n_features=dataset_settings["n_initial_features"],
         random_state=global_seed,
+        dataset_settings=dataset_settings # &lt;-- Pass the settings here
     )
 
     # Execute the data generation pipeline

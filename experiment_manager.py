@@ -102,9 +102,6 @@ def main():
     tune_anal.add_argument("--base-training-config", required=True, type=str)
     tune_anal.add_argument("--sample-fraction", type=float, default=0.1, help="The fraction of data used during tuning, for result reproducibility.")
 
-    # Global Tracking
-    track = subparsers.add_parser("track-studies", help="Generate a global spreadsheet tracking all experiment families.")
-
     args = parser.parse_args()
 
     if args.command == "generate":
@@ -123,8 +120,6 @@ def main():
         aggregate(args.optimal_config)
     elif args.command == "aggregate-all":
         aggregate_all_families(args.optimal_config)
-    elif args.command == "track-studies":
-        generate_global_tracking_sheet()
     elif args.command == "compare-families":
         compare_families(args.original_optimal_config, args.perturbation_tag)
     elif args.command == "tune-experiment":

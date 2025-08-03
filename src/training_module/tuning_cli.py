@@ -10,6 +10,7 @@ import copy
 import torch
 import os
 import json
+import shutil
 import matplotlib.pyplot as plt
 from optuna.trial import TrialState
 from optuna.visualization.matplotlib import plot_optimization_history, plot_param_importances
@@ -213,7 +214,11 @@ def run_hyperparameter_tuning(
         val_loader = DataLoader(dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
 
         criterion = nn.BCEWithLogitsLoss()
-        optimiser = torch.optim.Adam(model.parameters(), lr=hyperparams["learning_rate"])
+        optimiser = torch.optim.Adam(
+            model.parameters(),
+            lr=hyperparams["learning_rate"],
+            weight_decay=hyperparams["weight_decay"] 
+        )
         start_time = time.time()
         try:
             trained_model, history = train_model(
@@ -231,7 +236,7 @@ def run_hyperparameter_tuning(
         training_time = time.time() - start_time
         trial.set_user_attr("training_time", training_time)
 
-        # MODIFIED: Calculate validation loss to use as the tuning metric.
+
         trained_model.eval()
         val_loss = 0.0
         with torch.no_grad():
@@ -390,6 +395,26 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     study_name = f"{dataset_base_name}_{model_name_suffix}"
     storage_name = f"sqlite:///db/{study_name}_tuning.db"
 
+    print("\n--- Clearing old analysis plots ---")
+    base_family = extract_family_base(dataset_base_name)
+    
+    # Define plot directories
+    output_plot_dir = project_root / "reports" / "figures" / base_family / dataset_base_name
+    tuning_output_plot_dir = project_root / "reports" / "figures" / base_family / f"{model_name_suffix}_tuning"
+
+    # Delete directories if they exist
+    if output_plot_dir.exists():
+        shutil.rmtree(output_plot_dir)
+        print(f"Removed old directory: {output_plot_dir}")
+    
+    if tuning_output_plot_dir.exists():
+        shutil.rmtree(tuning_output_plot_dir)
+        print(f"Removed old directory: {tuning_output_plot_dir}")
+        
+    # Recreate the main directory for candidate plots
+    output_plot_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Plots will be saved to: {output_plot_dir}")
+    
     print(f"--- Analysing Study: {study_name} ---")
     try:
         study = optuna.load_study(study_name=study_name, storage=storage_name)
@@ -563,7 +588,7 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         print("Warning: Could not generate parameter importance plot.")
         
     # --- Write Final Training Config ---
-    def create_and_save_optimal_config(best_params, final_data_config_path, base_training_config_path, tuning_config):
+    def create_and_save_optimal_config(best_params, final_data_config_path, base_training_config_path, tuning_config, best_trial_number):
         with open(base_training_config_path, 'r') as f:
             config_template = yaml.safe_load(f)
 

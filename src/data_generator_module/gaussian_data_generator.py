@@ -22,24 +22,15 @@ class GaussianDataGenerator:
     - Noise samples: drawn from noise Gaussian distribution (target = 0)
     """
 
-    def __init__(self, n_samples: int, n_features: int, random_state: int):
+    def __init__(self, n_samples: int, n_features: int, random_state: int, dataset_settings: dict = None):
         """
         Initialize the GaussianDataGenerator.
-
-        Parameters:
-        -----------
-        n_samples : int
-            Number of samples to generate
-        n_features : int
-            Number of features to generate
-        random_state : int
-            Random seed for reproducibility
         """
         DataGeneratorValidators.validate_init_parameters(n_samples, n_features)
-
         self.n_samples = n_samples
         self.n_features = n_features
         self.random_state = random_state
+        self.dataset_settings = dataset_settings if dataset_settings is not None else {}
         self.data: Optional[pd.DataFrame] = None
         self.feature_types: Dict[str, str] = {}
         self.feature_parameters: Dict[str, Dict] = {}
@@ -126,20 +117,33 @@ class GaussianDataGenerator:
 
         rng = np.random.RandomState(self.random_state)
 
+        # Get the number of decimal places from settings, with a fallback to None
+        decimal_places = self.dataset_settings.get('continuous_decimal_places')
+    
         # Generate signal features
         signal_data = {}
         for feature_name, params in signal_features.items():
             feature_data = rng.normal(params["mean"], params["std"], n_signal_samples)
-            if feature_types.get(feature_name, "continuous") == "discrete":
+            feature_type = feature_types.get(feature_name, "continuous")
+            
+            if feature_type == "discrete":
                 feature_data = np.round(feature_data)
+            elif feature_type == "continuous" and decimal_places is not None:
+                feature_data = np.round(feature_data, decimal_places) # &lt;-- Round continuous data
+                
             signal_data[feature_name] = feature_data
-
+    
         # Generate noise features
         noise_data = {}
         for feature_name, params in noise_features.items():
             feature_data = rng.normal(params["mean"], params["std"], n_noise_samples)
-            if feature_types.get(feature_name, "continuous") == "discrete":
+            feature_type = feature_types.get(feature_name, "continuous")
+    
+            if feature_type == "discrete":
                 feature_data = np.round(feature_data)
+            elif feature_type == "continuous" and decimal_places is not None:
+                feature_data = np.round(feature_data, decimal_places) # &lt;-- Round continuous data
+    
             noise_data[feature_name] = feature_data
 
         # Combine all features

@@ -1,21 +1,26 @@
 model_name: "mlp_001"
 
 search_space:
-  hidden_size:
-    type: int
-    low: 32
-    high: 256
-    step: 32
-  learning_rate:
-    type: float
-    low: 1.0e-5
-    high: 1.0e-2
-    log: true
-  batch_size:
-    type: categorical 
-    choices: [32, 64, 128, 256]
-  epochs:
-    type: int
-    low: 20
-    high: 100
-    step: 10
+    hidden_size:
+        type: int
+        low: 32
+        high: 128
+        step: 32
+    learning_rate:
+        type: float
+        low: 1.0e-5
+        high: 1.0e-2
+        log: true
+    batch_size:
+        type: categorical 
+        choices: [32, 64, 128, 256]
+    epochs:
+        type: int
+        low: 20
+        high: 100
+        step: 10
+    weight_decay:
+        type: float
+        low: 1.0e-5
+        high: 1.0e-2
+        log: True

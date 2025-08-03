@@ -1,5 +1,3 @@
-# src/analysis_module/analysis_cli.py
-
 import argparse
 import shutil
 import re
@@ -19,6 +17,7 @@ from src.utils.plotting_helpers import (
     generate_subtitle_from_config,
 )
 from src.data_generator_module.utils import find_project_root
+from src.analysis_module.global_tracker import generate_global_tracking_sheet
 
 def aggregate(optimal_config: str):
     """
@@ -198,7 +197,10 @@ def aggregate_all_families(optimal_config: str):
         aggregate(str(family_config_path))
 
     print("\n--- Auto-aggregation of all original and perturbed experiment families complete. ---")
-
+    
+    generate_global_tracking_sheet()
+    print("\n--- Automatically generating global tracking spreadsheet... ---")
+    
     perturbation_tag = None
     for family in family_bases:
         if "_pert_" in family:
