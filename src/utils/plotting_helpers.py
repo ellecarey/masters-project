@@ -26,8 +26,12 @@ def generate_subtitle_from_config(config: dict) -> str:
             for p in pert_settings:
                 feature = p.get('feature', 'N/A')
                 class_label = 'Noise' if p.get('class_label') == 0 else 'Signal'
-                sigma_shift = p.get('sigma_shift', 0.0)
-                pert_descs.append(f"{feature} ({class_label}) by {sigma_shift:+.1f}σ")
+                if 'scale_factor' in p:
+                    scale_factor = p.get('scale_factor', 1.0)
+                    pert_descs.append(f"{feature} ({class_label}) scaled by {scale_factor}x")
+                elif 'sigma_shift' in p:
+                    sigma_shift = p.get('sigma_shift', 0.0)
+                    pert_descs.append(f"{feature} ({class_label}) by {sigma_shift:+.1f}σ")
             pert_desc = f"Perturbation: {'; '.join(pert_descs)}"
         else:
             pert_desc = "No Perturbations"

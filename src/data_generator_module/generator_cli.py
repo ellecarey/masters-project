@@ -228,7 +228,8 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
             generator.perturb_feature(
                 feature_name=p_conf['feature'],
                 class_label=p_conf['class_label'],
-                sigma_shift=p_conf['sigma_shift']
+                sigma_shift=p_conf.get('sigma_shift'),
+                scale_factor=p_conf.get('scale_factor')
             )
         perturbed_config = data_config.copy()
         perturbed_config['perturbation_settings'] = perturb_data['perturbation_settings']
