@@ -6,7 +6,7 @@ from src.data_generator_module.generator_cli import (
     generate_multi_seed,
     perturb_multi_seed,
 )
-from src.training_module.training_cli import train_multi_seed, evaluate_multi_seed, train_single_config
+from src.training_module.training_cli import evaluate_multi_seed, train_single_config
 from src.training_module.tuning_cli import (
     run_experiments,
     run_hyperparameter_tuning,
