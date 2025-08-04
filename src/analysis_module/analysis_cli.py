@@ -1,3 +1,5 @@
+# src/analysis_module/analysis_cli.py
+
 import argparse
 import shutil
 import re
@@ -18,6 +20,7 @@ from src.utils.plotting_helpers import (
 )
 from src.data_generator_module.utils import find_project_root
 from src.analysis_module.global_tracker import generate_global_tracking_sheet
+from .comparison import compare_families
 
 def aggregate(optimal_config: str):
     """
@@ -27,7 +30,6 @@ def aggregate(optimal_config: str):
     apply_custom_plot_style()
     project_root = Path(find_project_root())
     models_dir = project_root / "models"
-
     # --- 1. Identify the Experiment Family ---
     optimal_config_path = Path(optimal_config)
     if not optimal_config_path.is_absolute():
@@ -40,12 +42,12 @@ def aggregate(optimal_config: str):
     if not family_match:
         # Fallback for training configs that might not have a seed in the name
         family_match = re.match(r'(.+?)_training_.*_optimal', optimal_config_path.stem)
-
+    
     if not family_match:
         print(f"Error: Could not determine experiment family from '{optimal_config_path.name}'.")
         return
-
     family_base_name = family_match.group(1)
+
     print(f"--- Aggregating results for experiment family: {family_base_name} ---")
 
     # --- 2. Find and Load Metric Files ---
@@ -54,7 +56,7 @@ def aggregate(optimal_config: str):
         print(f"Error: No metric files found for family '{family_base_name}' in '{models_dir}'.")
         return
     print(f"Found {len(metric_files)} metric files to aggregate.")
-
+    
     all_metrics = []
     for f in metric_files:
         match = re.search(r'_seed(\d+)', f.stem)
@@ -92,7 +94,7 @@ def aggregate(optimal_config: str):
     )
     summary_stats.to_csv(spreadsheet_save_path)
     print(f"\nSaved summary spreadsheet to: {spreadsheet_save_path}")
-    
+
     # --- 4. Generate Standardized Plot Title ---
     data_config_path = project_root / "configs" / "data_generation" / f"{family_base_name}_seed0_config.yml"
     subtitle = f"Family: {family_base_name}"
@@ -107,39 +109,35 @@ def aggregate(optimal_config: str):
     plot_data = summary_stats.reset_index().rename(columns={'index': 'Metric'})
     main_metrics_df = plot_data[plot_data['Metric'] != 'Test Loss (BCE)']
     yerr = bounded_yerr(main_metrics_df['mean'].values, main_metrics_df['std'].values)
-
     ax.errorbar(main_metrics_df['Metric'], main_metrics_df['mean'], yerr=yerr, fmt='-o', capsize=5, label='Mean ± Std Dev')
-    
+
     value_labels = [f'{val:.3f}' for val in main_metrics_df['mean'].values]
-    
     add_single_series_labels(
-        ax=ax, 
-        x_positions=range(len(main_metrics_df)), 
-        values=main_metrics_df['mean'].values, 
-        labels_text=value_labels, 
+        ax=ax,
+        x_positions=range(len(main_metrics_df)),
+        values=main_metrics_df['mean'].values,
+        labels_text=value_labels,
         color='black'
     )
-
+    
     fig.suptitle("Aggregated Performance Metrics", y=0.98)
     if subtitle:
         y_pos = 0.92
         for line in subtitle.split('\n'):
             fig.text(0.5, y_pos, line, ha='center', wrap=True)
             y_pos -= 0.05
-
+    
     ax.set_ylabel('Score')
     ax.set_xlabel('Metric')
     ax.set_xticks(range(len(main_metrics_df['Metric'])))
     ax.set_xticklabels(main_metrics_df['Metric'], rotation=45, ha="right")
-    
     y_min, y_max = calculate_adaptive_ylimits(main_metrics_df['mean'].values, main_metrics_df['std'].values)
     ax.set_ylim(y_min, y_max)
     ax.grid(True, linestyle='--', alpha=0.7)
-    
     apply_decimal_formatters(ax, precision=3)
     
     fig.tight_layout(rect=[0, 0.03, 1, 0.90])
-
+    
     plot_save_path = experiment_family_path(
         full_experiment_name=family_base_name,
         art_type="figure",
@@ -149,10 +147,8 @@ def aggregate(optimal_config: str):
 
     plt.savefig(plot_save_path, bbox_inches='tight')
     plt.close()
-
     print(f"\nSaved main metrics plot to: {plot_save_path}")
     print("\n--- Aggregation complete. ---")
-
 
 def aggregate_all_families(optimal_config: str):
     """
@@ -167,7 +163,6 @@ def aggregate_all_families(optimal_config: str):
     project_root = Path(find_project_root())
     models_dir = project_root / "models"
     configs_gen_dir = project_root / "configs/training/generated"
-
     orig_base_name = orig_opt_path.stem
     base_prefix = re.sub(r'_(?:seed\d+|training)_mlp_.*_optimal$', '', orig_base_name)
     print(f"Scanning for experiment families with base: {base_prefix}")
@@ -188,56 +183,52 @@ def aggregate_all_families(optimal_config: str):
     for family in sorted(family_bases):
         family_config_filename = f"{family}_seed0{model_suffix}.yml"
         family_config_path = configs_gen_dir / family_config_filename
-
         if not family_config_path.exists():
             print(f"Creating temporary config '{family_config_path.name}' for aggregation.")
             shutil.copyfile(orig_opt_path, family_config_path)
-
+        
         print(f"\nAggregating family: {family}")
         aggregate(str(family_config_path))
-
-    print("\n--- Auto-aggregation of all original and perturbed experiment families complete. ---")
     
-    generate_global_tracking_sheet()
+    print("\n--- Auto-aggregation of all original and perturbed experiment families complete. ---")
+
     print("\n--- Automatically generating global tracking spreadsheet... ---")
+    generate_global_tracking_sheet()
+
+    # Automatically run comparison if a perturbed family was found
     
     perturbation_tag = None
     for family in family_bases:
         if "_pert_" in family:
-            match = re.search(r'(_pert_.*)$', family)
+            match = re.search(r'_pert_.*', family)
             if match:
-                perturbation_tag = match.group(1)
-                break
+                perturbation_tag = match.group(0)
+                break 
 
     if perturbation_tag:
         print("\n" + "=" * 80)
-        print("Next Step: Compare the aggregated results")
+        print("Automatically generating comparison plots...")
         print("=" * 80 + "\n")
-        print("Use the 'compare-families' command to generate plots comparing the performance")
-        print("of the original dataset against the perturbed version.")
-
+        
         original_family_optimal_config = configs_gen_dir / f"{base_prefix}_seed0{model_suffix}.yml"
-
-        compare_command = (
-            f"uv run experiment_manager.py compare-families \\\n"
-            f" --original-optimal-config {original_family_optimal_config} \\\n"
-            f" --perturbation-tag {perturbation_tag}"
+        
+        # Directly call the comparison function
+        compare_families(
+            original_optimal_config=str(original_family_optimal_config),
+            perturbation_tag=perturbation_tag
         )
-        print(compare_command)
-        print("\n" + "=" * 80)
-
 
 def main():
     parser = argparse.ArgumentParser(description="CLI tools for experiment analysis (aggregation and comparison).")
     subparsers = parser.add_subparsers(dest="command", required=True)
-
+    
     agg = subparsers.add_parser("aggregate", help="Aggregate multi-seed results for an experiment family.")
     agg.add_argument("--optimal-config", required=True, type=str, help="Path to one of the final optimal config files used for the runs (e.g., ..._optimal.yml).")
 
     comp = subparsers.add_parser("compare-families", help="Compare original and perturbed experiment families.")
     comp.add_argument("--original-optimal-config", required=True, type=str, help="Original (unperturbed) optimal config YAML file.")
     comp.add_argument("--perturbation-tag", required=True, type=str, help="Perturbation tag used in filenames for the perturbed family (e.g. 'pert_f4n_by1p0s').")
-    
+
     agg_all = subparsers.add_parser("aggregate-all", help="Aggregate original and all detected perturbed experiment families automatically.")
     agg_all.add_argument("--optimal-config", required=True, type=str, help="Path to the optimal config file of the ORIGINAL family.")
 
@@ -246,14 +237,13 @@ def main():
     if args.command == "aggregate":
         aggregate(args.optimal_config)
     elif args.command == "compare-families":
-        # MODIFIED: Import the function here to break the circular dependency
-        from .comparison import compare_families
+        # Note: This import is kept for direct CLI use, but the automated call above handles the pipeline
+        from .comparison import compare_families 
         compare_families(args.original_optimal_config, args.perturbation_tag)
     elif args.command == "aggregate-all":
         aggregate_all_families(args.optimal_config)
     else:
         parser.print_help()
-
 
 if __name__ == "__main__":
     main()

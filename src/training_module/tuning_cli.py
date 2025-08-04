@@ -255,13 +255,66 @@ def run_hyperparameter_tuning(
     print(f"\nWorker has finished its trials for study '{study_name}'.")
 
 
-def run_experiments(job: str):
+def run_experiments(job: str, data_config_path: str = None):
+    """
+    Launches a distributed hyperparameter tuning job for a given experiment setup.
+    Can either use a provided data config file or interactively prompt the user.
+    """
     try:
         project_root = Path(find_project_root())
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)
 
+    # --- Determine the data configuration file to use ---
+    selected_data_config_path = None
+    if data_config_path:
+        # Use the path provided as an argument
+        provided_path = Path(data_config_path)
+        # Ensure the path is absolute or resolve it relative to the project root
+        if provided_path.is_absolute():
+            selected_data_config_path = provided_path
+        else:
+            selected_data_config_path = project_root / data_config_path
+
+        if not selected_data_config_path.exists():
+            print(f"Error: Provided data config file not found at '{selected_data_config_path}'")
+            sys.exit(1)
+        print(f"Using provided data config: {selected_data_config_path.name}")
+    else:
+        # Fallback to interactive selection
+        config_dir = project_root / "configs" / "data_generation"
+        available_configs = [
+            path for path in sorted(list(config_dir.glob("*.yml"))) if "_training_config.yml" in path.name
+        ]
+
+        if not available_configs:
+            print(f"Error: No '_training' data configuration files found in '{config_dir}'.")
+            sys.exit(1)
+
+        if len(available_configs) == 1:
+            selected_data_config_path = available_configs[0]
+            print(f"Automatically selected the only available training config: {selected_data_config_path.name}")
+        else:
+            print("\nPlease select a _training data configuration to run the tuning job on:")
+            for i, path in enumerate(available_configs):
+                print(f" [{i + 1}] {path.name}")
+            while True:
+                try:
+                    choice = input(f"\nEnter the number of the config to use (1-{len(available_configs)}): ")
+                    choice_idx = int(choice) - 1
+                    if 0 <= choice_idx < len(available_configs):
+                        selected_data_config_path = available_configs[choice_idx]
+                        print(f"You selected: {selected_data_config_path.name}")
+                        break
+                    print("Invalid number. Please try again.")
+                except (ValueError, IndexError):
+                    print("Invalid input. Please enter a number from the list.")
+                except (KeyboardInterrupt, EOFError):
+                    print("\nSelection cancelled. Exiting.")
+                    sys.exit(1)
+
+    # --- Load experiment and job configurations ---
     experiments_file = project_root / "configs" / "experiments.yml"
     try:
         with open(experiments_file, "r") as f:
@@ -276,33 +329,7 @@ def run_experiments(job: str):
         print(f"Error: Job '{job}' not found in `{experiments_file}`.")
         sys.exit(1)
 
-    config_dir = project_root / "configs" / "data_generation"
-    available_configs = [
-        path for path in sorted(list(config_dir.glob("*.yml"))) if "_training_config.yml" in path.name
-    ]
-    if not available_configs:
-        print(f"Error: No '_training' data configuration files found in '{config_dir}'.")
-        sys.exit(1)
-
-    print("\nPlease select a _training data configuration to run the tuning job on:")
-    for i, path in enumerate(available_configs):
-        print(f" [{i + 1}] {path.name}")
-
-    while True:
-        try:
-            choice = input(f"\nEnter the number of the config to use (1-{len(available_configs)}): ")
-            choice_idx = int(choice) - 1
-            if 0 <= choice_idx < len(available_configs):
-                selected_data_config_path = available_configs[choice_idx]
-                print(f"You selected: {selected_data_config_path.name}")
-                break
-            print("Invalid number. Please try again.")
-        except (ValueError, IndexError):
-            print("Invalid input. Please enter a number from the list.")
-        except (KeyboardInterrupt, EOFError):
-            print("\nSelection cancelled. Exiting.")
-            sys.exit(1)
-
+    # --- Prepare Distributed Study ---
     print("\n--- Preparing Distributed Study ---")
     with open(selected_data_config_path, "r") as f:
         data_config = yaml.safe_load(f)
@@ -312,7 +339,6 @@ def run_experiments(job: str):
     study_name = f"{dataset_base_name}_{model_name_suffix}"
     storage_name = f"sqlite:///db/{study_name}_tuning.db"
     pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=5, interval_steps=1)
-    
     optuna.create_study(
         study_name=study_name,
         storage=storage_name,
@@ -320,8 +346,10 @@ def run_experiments(job: str):
         load_if_exists=True,
         pruner=pruner,
     )
+
     print(f"Successfully created or loaded study '{study_name}' in '{storage_name}' for MINIMIZATION")
 
+    # --- Launch Worker Processes ---
     print(f"\n--- Starting Job: {job} ---")
     n_trials_per_worker = (job_params['n_trials'] + job_params['num_workers'] - 1) // job_params['num_workers']
     command = [
@@ -332,6 +360,7 @@ def run_experiments(job: str):
         "--n-trials", str(n_trials_per_worker),
         "--sample-fraction", str(job_params["sample_fraction"]),
     ]
+
     workers = [
         subprocess.Popen(command, cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(job_params['num_workers'])
@@ -352,6 +381,7 @@ def run_experiments(job: str):
 
     print("\n--- All workers have finished. Job complete. ---")
 
+    # --- Display Next Steps ---
     print("\n" + "="*80)
     print("Tuning phase is complete. To analyse the results and select the best trial, run:")
     analysis_command = (
@@ -364,7 +394,8 @@ def run_experiments(job: str):
     print("="*80 + "\n")
 
 
-def run_tuning_analysis(data_config: str, base_training_config: str, sample_fraction: float):
+
+def run_tuning_analysis(data_config: str, base_training_config: str, sample_fraction: float, non_interactive: bool = False):
     """
     Analyse a completed Optuna study, generate plots, and allow interactive selection.
     Retrains the final selected model on the full dataset.
@@ -427,7 +458,6 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         print("Error: No trials completed successfully.")
         return
         
-    # MODIFIED: Sort by value ascending, since lower loss is better.
     completed_trials.sort(key=lambda t: t.value, reverse=False)
     top_trials = completed_trials[:5]
 
@@ -488,28 +518,48 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     if not candidate_info:
         print("\nError: No candidates were successfully trained. Cannot proceed.")
         return
-        
+
     selected_trial = None
-    while not selected_trial:
-        try:
-            choice_str = input(f"\nEnter the Rank of the trial to use (1-{len(candidate_info)}): ")
-            choice_idx = int(choice_str) - 1
-            if 0 <= choice_idx < len(candidate_info):
-                selected_candidate_info = candidate_info[choice_idx]
-                trial_number_to_find = selected_candidate_info['trial_number']
-                selected_trial = next((t for t in top_trials if t.number == trial_number_to_find), None)
-                if selected_trial:
-                    print(f"You selected Rank {choice_str} (Trial #{selected_trial.number}).")
-                    break
-                else:
-                    print(f"Error: Could not find trial for rank {choice_str}.")
+    if non_interactive:
+        print("\n--- Non-interactive mode: Automatically selecting Rank 1 candidate ---")
+        if candidate_info:
+            selected_candidate_info = candidate_info[0]
+            trial_number_to_find = selected_candidate_info['trial_number']
+            selected_trial = next((t for t in top_trials if t.number == trial_number_to_find), None)
+            if selected_trial:
+                print(f"Automatically selected Rank 1 (Trial #{selected_trial.number}).")
             else:
-                print(f"Invalid rank. Please enter a number between 1 and {len(candidate_info)}.")
-        except (ValueError, IndexError):
-            print("Invalid input. Please enter a number from the list.")
-        except (KeyboardInterrupt, EOFError):
-            print("\nSelection cancelled. Exiting.")
+                print("Error: Could not find trial details for Rank 1 candidate.")
+                return
+        else:
+            print("Error: No candidate info available for automatic selection.")
             return
+    else:
+        # interactive loop
+        while not selected_trial:
+            try:
+                choice_str = input(f"\nEnter the Rank of the trial to use (1-{len(candidate_info)}): ")
+                choice_idx = int(choice_str) - 1
+                if 0 <= choice_idx < len(candidate_info):
+                    selected_candidate_info = candidate_info[choice_idx]
+                    trial_number_to_find = selected_candidate_info['trial_number']
+                    selected_trial = next((t for t in top_trials if t.number == trial_number_to_find), None)
+                    if selected_trial:
+                        print(f"You selected Rank {choice_str} (Trial #{selected_trial.number}).")
+                        break
+                    else:
+                        print(f"Error: Could not find trial for rank {choice_str}.")
+                else:
+                    print(f"Invalid rank. Please enter a number between 1 and {len(candidate_info)}.")
+            except (ValueError, IndexError):
+                print("Invalid input. Please enter a number from the list.")
+            except (KeyboardInterrupt, EOFError):
+                print("\nSelection cancelled. Exiting.")
+                return
+
+    if not selected_trial:
+        print("Could not select a trial. Exiting.")
+        return
 
     # --- Retrain the chosen model on the ENTIRE dataset ---
     print("\n--- Retraining selected model on the full training dataset... ---")
