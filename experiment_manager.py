@@ -1,5 +1,3 @@
-# experiment_manager.py
-
 import argparse
 import os
 import torch.multiprocessing as mp
@@ -64,10 +62,6 @@ def main():
     train_single.add_argument("--data-config", required=True, type=str, help="Path to the specific data config YAML file.")
     train_single.add_argument("--optimal-config", required=True, type=str, help="The optimal config YAML for the training run.")
 
-    train_multi = subparsers.add_parser("train-multiseed", help="Multi-seed training")
-    train_multi.add_argument("--data-config-base", required=True, type=str, help="Example config file from family for training")
-    train_multi.add_argument("--optimal-config", required=True, type=str, help="Optimal config YAML for the run")
-
     # Evaluation
     eval_multi = subparsers.add_parser("evaluate-multiseed", help="Evaluate one model on a multi-seed dataset family")
     eval_multi.add_argument("--trained-model", required=True, type=str, help="Path to the pre-trained model (.pt) file")
@@ -112,8 +106,6 @@ def main():
         perturb_multi_seed(args.data_config_base, args.perturb_config)
     elif args.command == "train-single":
         train_single_config(args.data_config, args.optimal_config)
-    elif args.command == "train-multiseed":
-        train_multi_seed(args.data_config_base, args.optimal_config)
     elif args.command == "evaluate-multiseed":
         evaluate_multi_seed(args.trained_model, args.data_config_base, args.optimal_config)
     elif args.command == "aggregate":

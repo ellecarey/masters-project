@@ -183,26 +183,6 @@ def train_single_config(data_config_path: str, training_config_path: str):
     print(f"\nModel state dictionary saved to {model_filepath}")
 
 
-def train_multi_seed(data_config_base: str, optimal_config: str):
-    """
-    Train the same optimal config over a multi-seed dataset family.
-    """
-    from pathlib import Path
-    from src.training_module.training_cli import train_single_config  
-    from src.data_generator_module.utils import find_project_root
-
-    project_root = Path(find_project_root())
-    base_data_config_path = project_root / data_config_base
-    optimal_config_path = project_root / optimal_config
-    dataset_family_name = base_data_config_path.stem.replace('_config', '').split('_seed')[0]
-    data_config_dir = project_root / "configs" / "data_generation"
-    all_data_configs = sorted(list(data_config_dir.glob(f"{dataset_family_name}_seed*_config.yml")))
-    for data_config in all_data_configs:
-        print(f"Training on: {data_config.name}")
-        train_single_config(str(data_config), str(optimal_config_path))
-    print("\nMulti-seed training complete.")
-
-
 def evaluate_single_config(model_path: str, data_config_path: str, training_config_path: str):
     """
     Evaluate a pre-trained model on a single dataset's test split.

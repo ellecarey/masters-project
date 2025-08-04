@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 import numpy as np
+from sklearn.calibration import calibration_curve
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 from src.utils.report_paths import artefact_path, experiment_family_path, extract_family_base
 import re
@@ -409,3 +410,4 @@ def plot_combined_training_histories(candidate_info: list, output_dir: str, mode
     plt.savefig(save_path, bbox_inches='tight')
     plt.close()
     print(f"Saved combined training history plot with fully adaptive axes to: {save_path}")
+
