@@ -64,26 +64,48 @@ def compare_families(original_optimal_config, perturbation_tag):
     ## --- 3. Generate Dynamic Title ---
     pert_family_base = f"{dataset_base}_{safe_perturbation_tag}"
     pert_data_config_path = project_root / "configs" / "data_generation" / f"{pert_family_base}_seed0_config.yml"
-    pert_title_part = "Perturbed"
     
+    pert_title_part = "Perturbed"
     if pert_data_config_path.exists():
         pert_config = data_utils.load_yaml_config(str(pert_data_config_path))
         pert_settings = pert_config.get("perturbation_settings")
         if pert_settings and isinstance(pert_settings, list) and pert_settings:
             pert_descs = []
             for p in pert_settings:
-                feature = p.get('feature', 'N/A')
+                pert_type = p.get('type', 'individual')
                 class_label = 'Noise' if p.get('class_label') == 0 else 'Signal'
-                
-                # Check for scale_factor first, then sigma_shift
-                if 'scale_factor' in p:
-                    scale_val = p.get('scale_factor', 'N/A')
-                    pert_descs.append(f"{feature} ({class_label}) scaled by {scale_val}x")
-                elif 'sigma_shift' in p:
-                    shift_val = p.get('sigma_shift', 'N/A')
-                    pert_descs.append(f"{feature} ({class_label}) by {shift_val:+.1f}σ")
+                if pert_type == 'correlated':
+                    features = p.get('features', [])
+                    description = p.get('description', '')
+                    if len(features) <= 2:
+                        feature_str = '+'.join([f.replace('feature_', 'F') for f in features])
+                    else:
+                        feature_str = f"{len(features)} Features"
+                    
+                    if 'scale_factor' in p:
+                        scale_val = p.get('scale_factor', 'N/A')
+                        base_desc = f"Corr {feature_str} ({class_label}) {scale_val}x"
+                    elif 'sigma_shift' in p:
+                        shift_val = p.get('sigma_shift', 'N/A')
+                        base_desc = f"Corr {feature_str} ({class_label}) {shift_val:+.1f}σ"
+                    
+                    if description:
+                        pert_descs.append(f"{base_desc} [{description}]")
+                    else:
+                        pert_descs.append(base_desc)
+                        
+                else:
+                    # Handle individual perturbations (existing code)
+                    feature = p.get('feature', 'N/A')
+                    if 'scale_factor' in p:
+                        scale_val = p.get('scale_factor', 'N/A')
+                        pert_descs.append(f"{feature} ({class_label}) scaled by {scale_val}x")
+                    elif 'sigma_shift' in p:
+                        shift_val = p.get('sigma_shift', 'N/A')
+                        pert_descs.append(f"{feature} ({class_label}) by {shift_val:+.1f}σ")
+                        
             pert_title_part = "; ".join(pert_descs)
-
+    
     orig_data_config_path = project_root / "configs" / "data_generation" / f"{dataset_base}_seed0_config.yml"
     orig_subtitle = "Original:\n" + (generate_subtitle_from_config(data_utils.load_yaml_config(orig_data_config_path)) if orig_data_config_path.exists() else "Details unavailable")
     pert_subtitle = "Perturbed:\n" + (generate_subtitle_from_config(data_utils.load_yaml_config(pert_data_config_path)) if pert_data_config_path.exists() else "Details unavailable")

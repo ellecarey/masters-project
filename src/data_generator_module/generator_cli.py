@@ -70,11 +70,7 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
     if "perturbation_settings" in config:
         print("\nApplying perturbations...")
         for p_config in config["perturbation_settings"]:
-            generator.perturb_feature(
-                feature_name=p_config['feature'],
-                class_label=p_config['class_label'],
-                sigma_shift=p_config['sigma_shift']
-            )
+            generator.apply_perturbation_from_config(p_config)
 
     # Save the generated dataset
     output_settings = config.get("output_settings", {"data_dir": "data/"})
@@ -224,13 +220,10 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
             'noise_features': data_config['create_feature_based_signal_noise_classification']['noise_features'],
             'perturbations': []
         }
+
         for p_conf in perturb_data['perturbation_settings']:
-            generator.perturb_feature(
-                feature_name=p_conf['feature'],
-                class_label=p_conf['class_label'],
-                sigma_shift=p_conf.get('sigma_shift'),
-                scale_factor=p_conf.get('scale_factor')
-            )
+            generator.apply_perturbation_from_config(p_conf)
+
         perturbed_config = data_config.copy()
         perturbed_config['perturbation_settings'] = perturb_data['perturbation_settings']
         new_filename_base = create_filename_from_config(perturbed_config)

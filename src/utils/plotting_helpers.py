@@ -12,46 +12,149 @@ def generate_subtitle_from_config(config: dict) -> str:
     try:
         ds_settings = config.get("dataset_settings", {})
         n_samples = ds_settings.get("n_samples", "N/A")
-
+        
         class_config = config.get("create_feature_based_signal_noise_classification", {})
         feature_types = class_config.get("feature_types", {})
+        
         total_features = len(feature_types)
         continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
         discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
+        
         feature_desc = f"{total_features} Features ({continuous_count} Cont, {discrete_count} Disc)"
-
+        
+        # Enhanced perturbation handling with better error recovery
         pert_settings = config.get("perturbation_settings")
-        if pert_settings and isinstance(pert_settings, list) and pert_settings:
-            pert_descs = []
-            for p in pert_settings:
-                feature = p.get('feature', 'N/A')
-                class_label = 'Noise' if p.get('class_label') == 0 else 'Signal'
-                if 'scale_factor' in p:
-                    scale_factor = p.get('scale_factor', 1.0)
-                    pert_descs.append(f"{feature} ({class_label}) scaled by {scale_factor}x")
-                elif 'sigma_shift' in p:
-                    sigma_shift = p.get('sigma_shift', 0.0)
-                    pert_descs.append(f"{feature} ({class_label}) by {sigma_shift:+.1f}σ")
-            pert_desc = f"Perturbation: {'; '.join(pert_descs)}"
-        else:
-            pert_desc = "No Perturbations"
-
+        pert_desc = _process_perturbation_settings(pert_settings)
+        
+        # Calculate separation with error handling
         signal_features = class_config.get("signal_features", {})
         noise_features = class_config.get("noise_features", {})
-        separations = [
-            abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0))
-            for f in signal_features if f in noise_features
-        ]
-        avg_separation = sum(separations) / len(separations) if separations else 0.0
-        separation_desc = f"Avg. Separation: {avg_separation:.2f}"
-
+        
+        try:
+            separations = []
+            for f in signal_features:
+                if f in noise_features:
+                    sig_mean = signal_features[f].get('mean', 0)
+                    noise_mean = noise_features[f].get('mean', 0)
+                    separations.append(abs(sig_mean - noise_mean))
+            
+            avg_separation = sum(separations) / len(separations) if separations else 0.0
+            separation_desc = f"Avg. Separation: {avg_separation:.2f}"
+        except (KeyError, TypeError, ValueError) as e:
+            separation_desc = "Avg. Separation: N/A"
+        
         subtitle = (
             f"Dataset: {n_samples:,} Samples, {feature_desc}\n"
             f"{pert_desc} | {separation_desc}"
         )
+        
         return subtitle
-    except Exception:
-        return "Configuration details unavailable"
+        
+    except Exception as e:
+        # More specific error reporting for debugging
+        return f"Configuration parsing error: {str(e)[:50]}..."
+
+def _process_perturbation_settings(pert_settings) -> str:
+    """
+    Process perturbation settings with robust error handling.
+    """
+    if not pert_settings or not isinstance(pert_settings, list) or not pert_settings:
+        return "No Perturbations"
+    
+    pert_descs = []
+    
+    for i, p in enumerate(pert_settings):
+        try:
+            if not isinstance(p, dict):
+                pert_descs.append(f"Invalid perturbation {i+1}")
+                continue
+                
+            pert_type = p.get('type', 'individual')
+            class_label = p.get('class_label')
+            
+            # Validate class_label
+            if class_label not in [0, 1]:
+                pert_descs.append(f"Invalid class label in perturbation {i+1}")
+                continue
+                
+            class_name = 'Noise' if class_label == 0 else 'Signal'
+            
+            if pert_type == 'correlated':
+                desc = _process_correlated_perturbation(p, class_name)
+            else:
+                desc = _process_individual_perturbation(p, class_name)
+                
+            if desc:
+                pert_descs.append(desc)
+                
+        except Exception as e:
+            pert_descs.append(f"Error in perturbation {i+1}: {str(e)[:30]}")
+    
+    return f"Perturbation: {'; '.join(pert_descs)}" if pert_descs else "No valid perturbations"
+
+def _process_correlated_perturbation(p: dict, class_name: str) -> str:
+    """Process correlated perturbation with error handling."""
+    try:
+        features = p.get('features', [])
+        if not features:
+            return f"Correlated {class_name} (no features specified)"
+            
+        description = p.get('description', '')
+        
+        # Create feature string
+        if len(features) <= 3:
+            feature_str = ', '.join([f.replace('feature_', 'F') for f in features])
+        else:
+            feature_str = f"{len(features)} features"
+        
+        # Handle different perturbation parameters
+        if 'scale_factor' in p:
+            scale_val = p.get('scale_factor', 'N/A')
+            base_desc = f"Corr {feature_str} ({class_name}) {scale_val}x"
+        elif 'sigma_shift' in p:
+            shift_val = p.get('sigma_shift', 'N/A')
+            try:
+                shift_val_formatted = f"{float(shift_val):+.1f}σ"
+            except (ValueError, TypeError):
+                shift_val_formatted = f"{shift_val}σ"
+            base_desc = f"Corr {feature_str} ({class_name}) {shift_val_formatted}"
+        else:
+            base_desc = f"Corr {feature_str} ({class_name})"
+        
+        if description:
+            return f"{base_desc} [{description}]"
+        else:
+            return base_desc
+            
+    except Exception as e:
+        return f"Correlated {class_name} (parsing error)"
+
+def _process_individual_perturbation(p: dict, class_name: str) -> str:
+    """Process individual perturbation with error handling."""
+    try:
+        feature = p.get('feature', 'N/A')
+        
+        if 'scale_factor' in p:
+            scale_val = p.get('scale_factor', 'N/A')
+            return f"{feature} ({class_name}) scaled by {scale_val}x"
+        elif 'sigma_shift' in p:
+            shift_val = p.get('sigma_shift', 'N/A')
+            try:
+                shift_val_formatted = f"{float(shift_val):+.1f}σ"
+            except (ValueError, TypeError):
+                shift_val_formatted = f"{shift_val}σ"
+            return f"{feature} ({class_name}) by {shift_val_formatted}"
+        elif 'additive_noise' in p:
+            noise_val = p.get('additive_noise', 'N/A')
+            return f"{feature} ({class_name}) +noise {noise_val}"
+        elif 'multiplicative_factor' in p:
+            mult_val = p.get('multiplicative_factor', 'N/A')
+            return f"{feature} ({class_name}) ×{mult_val}"
+        else:
+            return f"{feature} ({class_name}) perturbation"
+            
+    except Exception as e:
+        return f"{class_name} perturbation (parsing error)"
 
 
 def bounded_yerr(mean, spread, lo=0.0, hi=1.0):

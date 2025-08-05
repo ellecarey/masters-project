@@ -1,0 +1,21 @@
+training_settings:
+  output_data_dir: data/
+  target_column: target
+  model_output_dir: models/
+  test_set_ratio: 0.2
+  validation_set_ratio: 0.2
+  model_name: mlp_001
+  scheduler_settings:
+    mode: min
+    factor: 0.1
+    patience: 5
+  early_stopping_settings:
+    patience: 10
+  hyperparameters:
+    hidden_size: 96
+    output_size: 1
+    learning_rate: 0.004176005354364749
+    epochs: 40
+    batch_size: 256
+    weight_decay: 1.2988260214249132e-05
+  optimal_trial_number: 14

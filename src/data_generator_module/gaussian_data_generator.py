@@ -376,7 +376,7 @@ class GaussianDataGenerator:
         print("\nSummary statistics:")
         return self.data.describe()
 
-    def perturb_feature(self, feature_name: str, class_label: int, sigma_shift: float = None, scale_factor: float = None):
+    def perturb_feature(self, feature_name: str, class_label: int, sigma_shift: float=None, scale_factor: float=None, additive_noise: float=None, multiplicative_factor: float=None):
         """
         Perturbs a specific feature for a given class by either an additive shift
         or a multiplicative scale factor.
@@ -391,13 +391,24 @@ class GaussianDataGenerator:
             The additive amount to shift the feature's mean, in multiples of its standard deviation.
         scale_factor : float, optional
             The multiplicative factor to scale the feature's values.
+        additive_noise : float, optional
+            The standard deviation of Gaussian noise to add to the feature.
+        multiplicative_factor : float, optional
+            The multiplicative factor to apply to the feature values.
         """
         if self.data is None:
             raise ValueError("Data has not been generated yet. Call a generation method first.")
+    
         if feature_name not in self.data.columns:
             raise ValueError(f"Feature '{feature_name}' not found in the dataset.")
-        if sigma_shift is not None and scale_factor is not None:
-            raise ValueError("Cannot apply both sigma_shift and scale_factor simultaneously.")
+    
+        perturbation_params = [sigma_shift, scale_factor, additive_noise, multiplicative_factor]
+        active_params = [p for p in perturbation_params if p is not None]
+        if len(active_params) > 1:
+            raise ValueError("Cannot apply multiple perturbation types simultaneously.")
+        
+        if len(active_params) == 0:
+            raise ValueError("At least one perturbation parameter must be specified.")
     
         class_name = "Signal" if class_label == 1 else "Noise"
         class_indices = self.data['target'] == class_label
@@ -408,18 +419,45 @@ class GaussianDataGenerator:
             perturbation_desc = f"scaled by {scale_factor}x"
             perturbation_type = 'scale'
             perturbation_value = scale_factor
+    
         elif sigma_shift is not None:
-            feature_params = self.feature_based_metadata['signal_features' if class_label == 1 else 'noise_features'].get(feature_name)
-            if not feature_params:
-                raise ValueError(f"Could not find original generation parameters for '{feature_name}' and class '{class_name}'.")
+            # Get original parameters for this feature and class
+            if hasattr(self, 'feature_based_metadata'):
+                feature_params = self.feature_based_metadata[
+                    'signal_features' if class_label == 1 else 'noise_features'
+                ].get(feature_name)
+                if feature_params:
+                    std_dev = feature_params['std']
+                    shift_amount = sigma_shift * std_dev
+                    self.data.loc[class_indices, feature_name] += shift_amount
+                    perturbation_desc = f"shifted by {sigma_shift}σ ({shift_amount:.3f})"
+                else:
+                    # Fallback: use empirical std of the class
+                    empirical_std = self.data.loc[class_indices, feature_name].std()
+                    shift_amount = sigma_shift * empirical_std
+                    self.data.loc[class_indices, feature_name] += shift_amount
+                    perturbation_desc = f"shifted by {sigma_shift}σ ({shift_amount:.3f}) [empirical]"
+            else:
+                raise ValueError("Cannot apply sigma_shift: feature metadata not available.")
             
-            original_std = feature_params['std']
-            shift_amount = original_std * sigma_shift
-            self.data.loc[class_indices, feature_name] += shift_amount
-            perturbation_desc = f"shifted by {sigma_shift} sigma ({shift_amount:.4f})"
-            perturbation_type = 'shift'
+            perturbation_type = 'sigma_shift'
             perturbation_value = sigma_shift
+    
+        elif additive_noise is not None:
+            noise = np.random.normal(0, additive_noise, sum(class_indices))
+            self.data.loc[class_indices, feature_name] += noise
+            perturbation_desc = f"added noise (σ={additive_noise})"
+            perturbation_type = 'additive_noise'
+            perturbation_value = additive_noise
+    
+        elif multiplicative_factor is not None:
+            self.data.loc[class_indices, feature_name] *= multiplicative_factor
+            perturbation_desc = f"multiplied by {multiplicative_factor}"
+            perturbation_type = 'multiplicative'
+            perturbation_value = multiplicative_factor
+    
         else:
+            # This should never be reached due to validation above, but kept as safety
             print(f"Warning: No perturbation specified for {feature_name}. No changes made.")
             return self
     
@@ -428,12 +466,170 @@ class GaussianDataGenerator:
         # Store metadata about the perturbation
         if 'perturbations' not in self.feature_based_metadata:
             self.feature_based_metadata['perturbations'] = []
-        
+    
         self.feature_based_metadata['perturbations'].append({
             'feature': feature_name,
             'class': class_name,
             'type': perturbation_type,
             'value': perturbation_value
         })
+    
+        return self
+        
+    def perturb_correlated_features(
+        self, 
+        feature_names: List[str], 
+        class_label: int, 
+        correlation_matrix: List[List[float]],
+        sigma_shift: float = None, 
+        scale_factor: float = None,
+        description: str = None
+    ):
+        """
+        Perturbs multiple features simultaneously with specified correlations.
+        
+        Parameters:
+        -----------
+        feature_names : List[str]
+            List of feature names to perturb together
+        class_label : int
+            The class to apply the perturbation to (1 for signal, 0 for noise)
+        correlation_matrix : List[List[float]]
+            Correlation matrix for the features (must be positive definite)
+        sigma_shift : float, optional
+            The additive shift amount in multiples of standard deviation
+        scale_factor : float, optional
+            The multiplicative scaling factor
+        description : str, optional
+            Human-readable description of the perturbation
+        """
+        if self.data is None:
+            raise ValueError("Data has not been generated yet. Call a generation method first.")
+        
+        if sigma_shift is not None and scale_factor is not None:
+            raise ValueError("Cannot apply both sigma_shift and scale_factor simultaneously.")
+        
+        # Validate inputs
+        for feature_name in feature_names:
+            if feature_name not in self.data.columns:
+                raise ValueError(f"Feature '{feature_name}' not found in the dataset.")
+        
+        correlation_matrix = np.array(correlation_matrix)
+        if correlation_matrix.shape != (len(feature_names), len(feature_names)):
+            raise ValueError("Correlation matrix dimensions must match number of features.")
+        
+        # Check if correlation matrix is positive definite
+        try:
+            np.linalg.cholesky(correlation_matrix)
+        except np.linalg.LinAlgError:
+            raise ValueError("Correlation matrix must be positive definite.")
+        
+        class_name = "Signal" if class_label == 1 else "Noise"
+        class_indices = self.data['target'] == class_label
+        n_samples = class_indices.sum()
+        
+        if n_samples == 0:
+            print(f"Warning: No samples found for {class_name} class. No perturbation applied.")
+            return self
+        
+        # Generate correlated perturbations
+        rng = np.random.RandomState(self.random_state + hash(tuple(feature_names)) % 2**31)
+        
+        if scale_factor is not None:
+            # For scaling, generate correlated multipliers
+            # Use log-normal distribution to ensure positive multipliers
+            mean_log = np.log(scale_factor)
+            cov_log = correlation_matrix * 0.1  # Small variance in log space
+            
+            log_multipliers = rng.multivariate_normal(
+                mean=[mean_log] * len(feature_names),
+                cov=cov_log,
+                size=n_samples
+            )
+            multipliers = np.exp(log_multipliers)
+            
+            # Apply correlated scaling
+            for i, feature_name in enumerate(feature_names):
+                self.data.loc[class_indices, feature_name] *= multipliers[:, i]
+            
+            perturbation_desc = f"correlated scaling by ~{scale_factor}x"
+            perturbation_type = 'correlated_scale'
+            perturbation_value = scale_factor
+            
+        elif sigma_shift is not None:
+            # Get original parameters for each feature
+            feature_params = []
+            for feature_name in feature_names:
+                params = self.feature_based_metadata[
+                    'signal_features' if class_label == 1 else 'noise_features'
+                ].get(feature_name)
+                if not params:
+                    raise ValueError(f"Could not find original parameters for '{feature_name}' and class '{class_name}'.")
+                feature_params.append(params)
+            
+            # Create covariance matrix from correlation matrix and standard deviations
+            std_devs = np.array([params['std'] for params in feature_params])
+            cov_matrix = correlation_matrix * np.outer(std_devs, std_devs)
+            
+            # Generate correlated shifts
+            shifts = rng.multivariate_normal(
+                mean=[0] * len(feature_names),
+                cov=cov_matrix,
+                size=n_samples
+            ) * sigma_shift
+            
+            # Apply correlated shifts
+            for i, feature_name in enumerate(feature_names):
+                self.data.loc[class_indices, feature_name] += shifts[:, i]
+            
+            perturbation_desc = f"correlated shift by {sigma_shift} sigma"
+            perturbation_type = 'correlated_shift'
+            perturbation_value = sigma_shift
+        else:
+            print(f"Warning: No perturbation specified for correlated features. No changes made.")
+            return self
+        
+        print(f"Applied {perturbation_desc} to {feature_names} for {class_name} class.")
+        
+        # Store metadata about the perturbation
+        if 'perturbations' not in self.feature_based_metadata:
+            self.feature_based_metadata['perturbations'] = []
+        
+        self.feature_based_metadata['perturbations'].append({
+            'type': 'correlated',
+            'features': feature_names,
+            'class': class_name,
+            'perturbation_type': perturbation_type,
+            'value': perturbation_value,
+            'correlation_matrix': correlation_matrix.tolist(),
+            'description': description
+        })
         
         return self
+
+    def apply_perturbation_from_config(self, perturbation_config: Dict):
+        """
+        Apply perturbation from configuration dictionary.
+        Handles both individual and correlated perturbations.
+        """
+        pert_type = perturbation_config.get('type', 'individual')
+        
+        if pert_type == 'correlated':
+            self.perturb_correlated_features(
+                feature_names=perturbation_config['features'],
+                class_label=perturbation_config['class_label'],
+                correlation_matrix=perturbation_config['correlation_matrix'],
+                sigma_shift=perturbation_config.get('sigma_shift'),
+                scale_factor=perturbation_config.get('scale_factor'),
+                description=perturbation_config.get('description')
+            )
+        else:
+            # Handle individual perturbations (existing functionality)
+            self.perturb_feature(
+                feature_name=perturbation_config['feature'],
+                class_label=perturbation_config['class_label'],
+                sigma_shift=perturbation_config.get('sigma_shift'),
+                scale_factor=perturbation_config.get('scale_factor'),
+                additive_noise=perturbation_config.get('additive_noise'),
+                multiplicative_factor=perturbation_config.get('multiplicative_factor')
+            )

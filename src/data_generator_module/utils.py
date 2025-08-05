@@ -88,14 +88,39 @@ def create_filename_from_config(config):
         pert_str_parts = []
         for p in perturbations:
             class_str = "n" if p['class_label'] == 0 else "s"
-            feature_index = p['feature'].split('_')[-1]
             
-            if 'scale_factor' in p:
-                scale_val = str(p['scale_factor']).replace('.', 'p')
-                pert_str_parts.append(f"pert_f{feature_index}{class_str}_scale{scale_val}")
-            elif 'sigma_shift' in p:
-                shift_val = str(p['sigma_shift']).replace('.', 'p').replace('-', 'm')
-                pert_str_parts.append(f"pert_f{feature_index}{class_str}_by{shift_val}s")
+            # Handle different perturbation types
+            pert_type = p.get('type', 'individual')
+            
+            if pert_type == 'correlated':
+                # Handle correlated perturbations
+                features = p.get('features', [])
+                if len(features) <= 2:
+                    feature_str = ''.join([f.split('_')[-1] for f in features])
+                else:
+                    feature_str = f"{len(features)}f"
+                
+                if 'scale_factor' in p:
+                    scale_val = str(p['scale_factor']).replace('.', 'p')
+                    pert_str_parts.append(f"pert_corr{feature_str}{class_str}_scale{scale_val}")
+                elif 'sigma_shift' in p:
+                    shift_val = str(p['sigma_shift']).replace('.', 'p').replace('-', 'm')
+                    pert_str_parts.append(f"pert_corr{feature_str}{class_str}_by{shift_val}s")
+            else:
+                # Handle individual perturbations (existing code)
+                feature_index = p['feature'].split('_')[-1]
+                if 'scale_factor' in p:
+                    scale_val = str(p['scale_factor']).replace('.', 'p')
+                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_scale{scale_val}")
+                elif 'sigma_shift' in p:
+                    shift_val = str(p['sigma_shift']).replace('.', 'p').replace('-', 'm')
+                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_by{shift_val}s")
+                elif 'additive_noise' in p:
+                    noise_val = str(p['additive_noise']).replace('.', 'p')
+                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_noise{noise_val}")
+                elif 'multiplicative_factor' in p:
+                    mult_val = str(p['multiplicative_factor']).replace('.', 'p')
+                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_mult{mult_val}")
 
         name_parts.append("_".join(pert_str_parts))
 
