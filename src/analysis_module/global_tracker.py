@@ -74,10 +74,18 @@ def generate_global_tracking_sheet():
         avg_separation = sum(separations) / len(separations) if separations else 0.0
 
         perturbation_info = "original"
-        if "perturbation_settings" in data_config:
+        if "perturbation_settings" in data_config and data_config["perturbation_settings"]:
             pert = data_config["perturbation_settings"][0]
             pert_class = 'noise' if pert.get('class_label') == 0 else 'signal'
-            perturbation_info = f"perturbed: {pert.get('feature')} ({pert_class}) by {pert.get('sigma_shift')}s"
+            feature = pert.get('feature', 'N/A')
+            
+            # Check for scale_factor first, then sigma_shift
+            if 'scale_factor' in pert:
+                scale_val = pert.get('scale_factor', 'N/A')
+                perturbation_info = f"perturbed: {feature} ({pert_class}) by {scale_val}x"
+            elif 'sigma_shift' in pert:
+                shift_val = pert.get('sigma_shift', 'N/A')
+                perturbation_info = f"perturbed: {feature} ({pert_class}) by {shift_val}s"
 
         metrics_mean = summary_df['mean'].to_dict()
         metrics_std = summary_df['std'].to_dict()

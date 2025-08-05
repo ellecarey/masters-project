@@ -11,7 +11,7 @@ from src.data_generator_module import utils as data_utils
 from src.utils.filenames import metrics_filename, model_filename, config_filename, parse_optimal_config_name
 from src.data_generator_module.utils import find_project_root
 from src.data_generator_module.plotting_style import apply_custom_plot_style
-from src.utils.report_paths import artefact_path, reports_root
+from src.utils.report_paths import artefact_path, reports_root, experiment_family_path
 from src.utils.plotting_helpers import bounded_yerr, calculate_adaptive_ylimits, add_smart_value_labels, add_single_series_labels, format_plot_title, generate_subtitle_from_config
 
 TRAINING_SEED = 99
@@ -61,10 +61,11 @@ def compare_families(original_optimal_config, perturbation_tag):
     pert_df = pd.DataFrame(pert_metrics_data)
     pert_df['seed'] = seeds
 
-    # --- 3. Generate Dynamic Title ---
+    ## --- 3. Generate Dynamic Title ---
     pert_family_base = f"{dataset_base}_{safe_perturbation_tag}"
     pert_data_config_path = project_root / "configs" / "data_generation" / f"{pert_family_base}_seed0_config.yml"
     pert_title_part = "Perturbed"
+    
     if pert_data_config_path.exists():
         pert_config = data_utils.load_yaml_config(str(pert_data_config_path))
         pert_settings = pert_config.get("perturbation_settings")
@@ -73,8 +74,14 @@ def compare_families(original_optimal_config, perturbation_tag):
             for p in pert_settings:
                 feature = p.get('feature', 'N/A')
                 class_label = 'Noise' if p.get('class_label') == 0 else 'Signal'
-                sigma_shift = p.get('sigma_shift', 0.0)
-                pert_descs.append(f"{feature} ({class_label}) by {sigma_shift:+.1f}σ")
+                
+                # Check for scale_factor first, then sigma_shift
+                if 'scale_factor' in p:
+                    scale_val = p.get('scale_factor', 'N/A')
+                    pert_descs.append(f"{feature} ({class_label}) scaled by {scale_val}x")
+                elif 'sigma_shift' in p:
+                    shift_val = p.get('sigma_shift', 'N/A')
+                    pert_descs.append(f"{feature} ({class_label}) by {shift_val:+.1f}σ")
             pert_title_part = "; ".join(pert_descs)
 
     orig_data_config_path = project_root / "configs" / "data_generation" / f"{dataset_base}_seed0_config.yml"
@@ -115,7 +122,13 @@ def compare_families(original_optimal_config, perturbation_tag):
     fig.text(0.98, 0.02, pert_subtitle, ha="right", va="bottom", wrap=True)
     fig.subplots_adjust(bottom=0.25, top=0.9)
     
-    plot_save_path = artefact_path(experiment=f"{dataset_base}_vs_{safe_perturbation_tag}", art_type="comparison", filename="comparison_summary.pdf")
+    # Save comparison summary plot
+    plot_save_path = experiment_family_path(
+        full_experiment_name=dataset_base,
+        art_type="figure", 
+        subfolder="comparison_summary",
+        filename=f"{dataset_base}_{safe_perturbation_tag}_comparison_summary.pdf"
+    )
     fig.savefig(plot_save_path, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved comparison summary plot to: {plot_save_path}")
@@ -154,7 +167,14 @@ def compare_families(original_optimal_config, perturbation_tag):
     fig_delta.text(0.98, 0.02, pert_subtitle, ha="right", va="bottom", wrap=True)
     fig_delta.subplots_adjust(bottom=0.25, top=0.9)
     
-    delta_plot_path = artefact_path(experiment=f"{dataset_base}_vs_{safe_perturbation_tag}", art_type="comparison", filename="comparison_delta.pdf")
+    # Save delta comparison plot  
+    delta_plot_path = experiment_family_path(
+        full_experiment_name=dataset_base,
+        art_type="figure", 
+        subfolder="comparison_summary",
+        filename=f"{dataset_base}_{safe_perturbation_tag}_delta_summary.pdf"
+    )
+
     fig_delta.savefig(delta_plot_path, bbox_inches='tight')
     plt.close(fig_delta)
     print(f"Saved delta comparison plot to: {delta_plot_path}")

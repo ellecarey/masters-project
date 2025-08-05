@@ -14,8 +14,8 @@ training_settings:
   hyperparameters:
     hidden_size: 96
     output_size: 1
-    learning_rate: 0.00260525838775875
-    epochs: 60
-    batch_size: 64
-    weight_decay: 1.0207065015850795e-05
-  optimal_trial_number: 32
+    learning_rate: 0.004176005354364749
+    epochs: 40
+    batch_size: 256
+    weight_decay: 1.2988260214249132e-05
+  optimal_trial_number: 14

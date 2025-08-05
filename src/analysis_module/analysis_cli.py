@@ -197,22 +197,20 @@ def aggregate_all_families(optimal_config: str):
 
     # Automatically run comparison if a perturbed family was found
     
-    perturbation_tag = None
+    perturbation_tags = []
     for family in family_bases:
         if "_pert_" in family:
             match = re.search(r'_pert_.*', family)
             if match:
-                perturbation_tag = match.group(0)
-                break 
-
-    if perturbation_tag:
-        print("\n" + "=" * 80)
-        print("Automatically generating comparison plots...")
-        print("=" * 80 + "\n")
+                perturbation_tags.append(match.group(0))
+    
+    # Generate comparison for each perturbation
+    for perturbation_tag in set(perturbation_tags):  # Use set to avoid duplicates
+        print(f"\n{'='*80}")
+        print(f"Generating comparison plots for: {perturbation_tag}")
+        print("="*80 + "\n")
         
         original_family_optimal_config = configs_gen_dir / f"{base_prefix}_seed0{model_suffix}.yml"
-        
-        # Directly call the comparison function
         compare_families(
             original_optimal_config=str(original_family_optimal_config),
             perturbation_tag=perturbation_tag
