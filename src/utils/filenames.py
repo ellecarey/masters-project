@@ -3,19 +3,23 @@ import re
 
 def parse_optimal_config_name(opt_config_path):
     """
-    Parse the optimal config filename to extract dataset base, model name, seed (int), perturbation_tag (or None).
+    Parse the optimal config filename to extract dataset base, model name, seed (int), or perturbation_tag (or None).
     """
     basename = Path(opt_config_path).stem
     m = re.match(
-        r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)_(?P<model>[\w]+)_optimal$", 
+        r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?(?:_seed(?P<seed>\d+)|_training)_(?P<model>[\w]+)_optimal$",
         basename
     )
+
     if not m:
         raise ValueError(f"Could not parse config filename: {basename}")
+
     dataset_base = m.group("base")
     perturbation_tag = m.group("pert")
-    seed = int(m.group("seed"))
+    seed_str = m.group("seed")
+    seed = int(seed_str) if seed_str else None
     model_name = m.group("model")
+
     return dataset_base, model_name, seed, perturbation_tag
 
 def experiment_name(

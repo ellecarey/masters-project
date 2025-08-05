@@ -58,18 +58,18 @@ def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: st
     # --- Determine paths for downstream tasks ---
     with open(base_data_config, "r") as f:
         data_conf_dict = yaml.safe_load(f)
-    
+
     # Create a temporary in-memory config to find the training dataset name
     training_data_conf_dict = data_conf_dict.copy()
     training_data_conf_dict["global_settings"]["random_seed"] = TRAINING_SEED
     temp_base_name = create_filename_from_config(training_data_conf_dict)
     training_base_name = temp_base_name.replace(f"_seed{TRAINING_SEED}", "_training")
     training_data_config_path = project_root / "configs" / "data_generation" / f"{training_base_name}_config.yml"
-    
+
     with open(project_root / "configs" / "experiments.yml", "r") as f:
         job_params = yaml.safe_load(f)["tuning_jobs"][tuning_job]
-        base_training_config_path = project_root / job_params["base_training_config"]
 
+    base_training_config_path = project_root / job_params["base_training_config"]
     model_name_suffix = base_training_config_path.stem
     optimal_config_path = project_root / "configs" / "training" / "generated" / f"{training_base_name}_{model_name_suffix}_optimal.yml"
     final_model_path = project_root / "models" / f"{training_base_name}_{model_name_suffix}_optimal_model.pt"
@@ -80,19 +80,24 @@ def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: st
         print(f"Skipping hyperparameter tuning (Step 3) and analysis (Step 4).")
         print(f"Using existing optimal config: {optimal_config_path.name}")
         print(f"Using existing model: {final_model_path.name}")
+        
+        # Set flag for interactive mode
+        skip_tuning = True
     else:
+        skip_tuning = False
+        
         # --- Step 3: Run hyperparameter tuning ---
         print(f"\n[STEP 3/6] Launching hyperparameter tuning job: '{tuning_job}'...")
         run_experiments(job=tuning_job, data_config_path=str(training_data_config_path))
         print("✅ Hyperparameter tuning complete.")
 
         # --- Step 4: Analyze tuning results and save optimal model ---
-        print("\n[STEP 4/6] Analyzing tuning results (non-interactive)...")
+        print("\n[STEP 4/6] Analyzing tuning results (INTERACTIVE - you will select the best trial)...")
         run_tuning_analysis(
             data_config=str(training_data_config_path),
             base_training_config=str(base_training_config_path),
             sample_fraction=job_params["sample_fraction"],
-            non_interactive=True # Ensure non-interactive execution
+            non_interactive=False  
         )
         print("✅ Tuning analysis complete.")
 

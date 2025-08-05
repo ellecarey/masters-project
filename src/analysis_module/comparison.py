@@ -30,8 +30,9 @@ def compare_families(original_optimal_config, perturbation_tag):
 
     # --- 1. & 2. Data Loading ---
     dataset_base, model_name, _, _ = parse_optimal_config_name(orig_config_path)
+    dataset_base = dataset_base.rstrip('_')
     models_dir = project_root / "models"
-    orig_pattern = metrics_filename(dataset_base, model_name, seed="*", perturbation_tag=None)
+    orig_pattern = metrics_filename(dataset_base, model_name, seed="*", perturbation_tag=None, optimized=False)
     orig_metric_files = list(models_dir.glob(orig_pattern.replace('*', '[0-9]*')))
 
     if not orig_metric_files:
@@ -42,8 +43,8 @@ def compare_families(original_optimal_config, perturbation_tag):
     seeds = [s for s in all_seeds if s != TRAINING_SEED]
     print(f"Discovered and using {len(seeds)} evaluation seeds for comparison: {seeds}")
 
-    orig_metrics_files = [models_dir / metrics_filename(dataset_base, model_name, seed=s) for s in seeds]
-    pert_metrics_files = [models_dir / metrics_filename(dataset_base, model_name, seed=s, perturbation_tag=safe_perturbation_tag) for s in seeds]
+    orig_metrics_files = [models_dir / metrics_filename(dataset_base, model_name, seed=s, optimized=False) for s in seeds]
+    pert_metrics_files = [models_dir / metrics_filename(dataset_base, model_name, seed=s, perturbation_tag=safe_perturbation_tag, optimized=False) for s in seeds]
 
     orig_metrics_data = [json.loads(f.read_text()) for f in orig_metrics_files if f.exists()]
     pert_metrics_data = [json.loads(f.read_text()) for f in pert_metrics_files if f.exists()]

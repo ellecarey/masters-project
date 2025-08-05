@@ -45,11 +45,15 @@ def generate_global_tracking_sheet():
 
         # 3. Dynamically find the corresponding optimal training config
         base_family_name = re.sub(r'(_pert_.*|_seed.*|_training.*)', '', family_name)
+        
+        # Construct the expected optimal config name based on the training dataset
+        # e.g., n1000..._training_mlp_001_optimal.yml
         optimal_config_pattern = f"{base_family_name}_training_*_optimal.yml"
         found_configs = list(generated_configs_dir.glob(optimal_config_pattern))
 
         optimal_trial_number = 'N/A'
         model_name = 'N/A'
+        
         if not found_configs:
             print(f"Warning: Could not find an optimal config file for family base '{base_family_name}'.")
         else:

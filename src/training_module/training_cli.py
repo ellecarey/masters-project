@@ -52,12 +52,11 @@ def train_single_config(data_config_path: str, training_config_path: str):
     train_settings = training_config["training_settings"]
     model_name = train_settings["model_name"]
     full_base = data_utils.create_filename_from_config(data_config)
-
-    # --- Generate canonical names (now only for training datasets) ---
+    
     exp_name = f"{full_base}_{model_name}_optimal"
     model_filepath_str = f"{full_base}_{model_name}_optimal_model.pt"
     metrics_filepath_str = f"{full_base}_{model_name}_optimal_metrics.json"
-    
+
     print(f"\nRunning experiment: {exp_name}")
 
     project_root = Path(data_utils.find_project_root())
@@ -219,7 +218,9 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
     project_root = Path(data_utils.find_project_root())
     model_output_dir = project_root / train_settings["model_output_dir"]
     model_output_dir.mkdir(parents=True, exist_ok=True)
-    metrics_filepath = model_output_dir / metrics_filename(base, model_name, seed=seed, perturbation_tag=pert_tag)
+    metrics_filepath = model_output_dir / metrics_filename(
+        base, model_name, seed=seed, perturbation_tag=pert_tag, optimized=False
+    )
     print(f"Saving evaluation metrics to: {metrics_filepath}")
 
     # --- Load Data --- 
@@ -297,10 +298,10 @@ def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_
     data_config_dir = project_root / "configs" / "data_generation"
     
     all_data_configs = sorted(list(data_config_dir.glob(f"{dataset_family_name}*_config.yml")))
-
+    
     # Exclude the training seed from evaluation
     evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
-    
+
     if not evaluation_configs:
         print(f"Error: No evaluation data configs found for family '{dataset_family_name}' in '{data_config_dir}'")
         return
@@ -309,7 +310,7 @@ def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_
     
     for data_config in evaluation_configs:
         evaluate_single_config(trained_model_path, str(data_config), str(optimal_config_path))
-
+    
     print("\nMulti-dataset evaluation complete.")
 
     # --- Suggest next step: Aggregation ---
