@@ -74,7 +74,8 @@ def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: st
     print("🧹 PRE-FLIGHT CHECK: Cleaning data directory. 🧹")
     print("="*80)
     clean_data_directory() # Call the new function
-
+    
+    project_root = Path(find_project_root())
     print("="*80)
     print("🚀 STARTING FULL AUTOMATED PIPELINE 🚀")
     print("="*80)
