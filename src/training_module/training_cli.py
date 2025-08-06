@@ -288,17 +288,27 @@ def evaluate_single_config(model_path: str, data_config_path: str, training_conf
 def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_config: str):
     """
     Evaluates a single pre-trained model over a multi-seed dataset family.
-    This will ignore the dedicated training seed.
+    This will ignore the dedicated training seed and skip datasets with existing metrics.
     """
-    project_root = Path(find_project_root())
-    base_data_config_path = project_root / data_config_base
+    project_root = Path(data_utils.find_project_root())
     optimal_config_path = project_root / optimal_config
     
+    # Load configs to get necessary parameters for constructing file paths
+    try:
+        training_config = data_utils.load_yaml_config(optimal_config_path)
+    except FileNotFoundError as e:
+        print(f"Error: Optimal training config file not found - {e}")
+        return
+
+    train_settings = training_config["training_settings"]
+    model_name = train_settings["model_name"]
+    model_output_dir = project_root / train_settings["model_output_dir"]
+
+    base_data_config_path = project_root / data_config_base
     dataset_family_name = base_data_config_path.stem.replace('_config', '').split('_seed')[0]
     data_config_dir = project_root / "configs" / "data_generation"
-    
+
     all_data_configs = sorted(list(data_config_dir.glob(f"{dataset_family_name}*_config.yml")))
-    
     # Exclude the training seed from evaluation
     evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
 
@@ -307,10 +317,41 @@ def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_
         return
 
     print(f"\nFound {len(evaluation_configs)} datasets to evaluate using model '{trained_model_path}'.")
+    evaluations_run = 0
     
-    for data_config in evaluation_configs:
-        evaluate_single_config(trained_model_path, str(data_config), str(optimal_config_path))
-    
+    for data_config_path in evaluation_configs:
+        # Load the specific data config to derive the output filename
+        current_data_config = data_utils.load_yaml_config(data_config_path)
+        full_base = data_utils.create_filename_from_config(current_data_config)
+
+        # Replicate logic from evaluate_single_config to find the metrics file path
+        regex = r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)$"
+        m = re.match(regex, full_base)
+        
+        if not m:
+            print(f"Warning: Could not parse base/pert/seed from {full_base}. Running evaluation without check.")
+        else:
+            base, pert_tag, seed_str = m.group("base"), m.group("pert"), m.group("seed")
+            seed = int(seed_str)
+
+            metrics_filepath = model_output_dir / metrics_filename(
+                base, model_name, seed=seed, perturbation_tag=pert_tag, optimized=False
+            )
+
+            # Check if the metrics file already exists
+            if metrics_filepath.exists():
+                print(f"Skipping evaluation for {data_config_path.name}, metrics file already exists at '{metrics_filepath.name}'.")
+                continue
+
+        # If metrics file doesn't exist, run the evaluation
+        evaluate_single_config(trained_model_path, str(data_config_path), str(optimal_config_path))
+        evaluations_run += 1
+
+    if evaluations_run > 0:
+        print(f"\nRan {evaluations_run} new evaluation(s).")
+    else:
+        print("\nNo new evaluations were needed. All metrics files already exist.")
+
     print("\nMulti-dataset evaluation complete.")
 
     # --- Suggest next step: Aggregation ---
@@ -319,12 +360,11 @@ def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_
     print("="*80 + "\n")
     print("Use the 'aggregate-all' command to summarize the performance metrics for both")
     print("the original and perturbed datasets.")
-
-    # The `optimal_config` argument points to the correct, existing training config.
-    # We pass this file directly to the next command.
+    
     aggregate_command = (
         f"uv run experiment_manager.py aggregate-all \\\n"
-        f"    --optimal-config {optimal_config}"
+        f" --optimal-config {optimal_config}"
     )
+
     print(aggregate_command)
     print("\n" + "="*80)
