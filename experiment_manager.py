@@ -81,9 +81,22 @@ def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: st
     print("="*80)
 
 
-    # --- Determine paths to final artifacts 
+    # --- Step 1: Generate multi-seed datasets ---
+    print("\n[STEP 1/6] Generating multi-seed datasets...")
+    generate_multi_seed(base_config_path=base_data_config)
+    print("✅ Datasets generated successfully.")
+
+    # --- Step 2: Apply perturbations (if specified) ---
+    if perturb_config:
+        print("\n[STEP 2/6] Applying perturbations...")
+        perturb_multi_seed(data_config_base=base_data_config, perturb_config=perturb_config)
+        print("✅ Perturbations applied successfully.")
+
+    # --- Determine paths for downstream tasks ---
     with open(base_data_config, "r") as f:
         data_conf_dict = yaml.safe_load(f)
+
+    # Create a temporary in-memory config to find the training dataset name
     training_data_conf_dict = data_conf_dict.copy()
     training_data_conf_dict["global_settings"]["random_seed"] = TRAINING_SEED
     temp_base_name = create_filename_from_config(training_data_conf_dict)
@@ -92,48 +105,42 @@ def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: st
 
     with open(project_root / "configs" / "experiments.yml", "r") as f:
         job_params = yaml.safe_load(f)["tuning_jobs"][tuning_job]
+
     base_training_config_path = project_root / job_params["base_training_config"]
     model_name_suffix = base_training_config_path.stem
     optimal_config_path = project_root / "configs" / "training" / "generated" / f"{training_base_name}_{model_name_suffix}_optimal.yml"
     final_model_path = project_root / "models" / f"{training_base_name}_{model_name_suffix}_optimal_model.pt"
 
-    # --- Check for artifacts and skip initial steps if they exist ---
+    # --- Check for existing tuning results ---
     if optimal_config_path.exists() and final_model_path.exists():
         print("\n[INFO] Found existing optimal configuration and model.")
-        print(f"Skipping data generation, perturbation, and hyperparameter tuning.")
+        print(f"Skipping hyperparameter tuning (Step 3) and analysis (Step 4).")
+        print(f"Using existing optimal config: {optimal_config_path.name}")
+        print(f"Using existing model: {final_model_path.name}")
+        
+        # Set flag for interactive mode
+        skip_tuning = True
     else:
-        print("\n[INFO] No existing optimal model found. Starting full pipeline from scratch.")
+        skip_tuning = False
         
-        # Step 1: Generate multi-seed datasets
-        print("\n[STEP 1/6] Generating multi-seed datasets...")
-        generate_multi_seed(base_config_path=base_data_config)
-        print("✅ Datasets generated successfully.")
-        
-        # Step 2: Apply perturbations (if specified)
-        if perturb_config:
-            print("\n[STEP 2/6] Applying perturbations...")
-            perturb_multi_seed(data_config_base=base_data_config, perturb_config=perturb_config)
-            print("✅ Perturbations applied successfully.")
-
-        # Step 3: Run hyperparameter tuning
+        # --- Step 3: Run hyperparameter tuning ---
         print(f"\n[STEP 3/6] Launching hyperparameter tuning job: '{tuning_job}'...")
         run_experiments(job=tuning_job, data_config_path=str(training_data_config_path))
         print("✅ Hyperparameter tuning complete.")
 
-        # Step 4: Analyze tuning results
+        # --- Step 4: Analyze tuning results and save optimal model ---
         print("\n[STEP 4/6] Analyzing tuning results (INTERACTIVE - you will select the best trial)...")
         run_tuning_analysis(
             data_config=str(training_data_config_path),
             base_training_config=str(base_training_config_path),
             sample_fraction=job_params["sample_fraction"],
-            non_interactive=False
+            non_interactive=False  
         )
         print("✅ Tuning analysis complete.")
 
-
-
-    # Step 5: Evaluate the optimal model on all dataset families
+    # --- Step 5: Evaluate the optimal model on all dataset families ---
     print("\n[STEP 5/6] Evaluating optimal model on all seeds...")
+    
     # Evaluate the original family first
     print(f"--- Evaluating on original family from: {Path(base_data_config).name} ---")
     evaluate_multi_seed(
@@ -159,13 +166,12 @@ def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: st
 
     print("✅ Multi-seed evaluation complete.")
 
-    # Step 6: Aggregate and Compare All Results
+    # --- Step 6: Aggregate and Compare All Results ---
     print("\n[STEP 6/6] Aggregating all results and generating final comparison...")
     aggregate_all_families(optimal_config=str(optimal_config_path))
     print("✅ Aggregation and comparison complete.")
 
     print("\n🎉 PIPELINE FINISHED SUCCESSFULLY! 🎉")
-    
 
 def run_pipeline_batch(base_data_configs: list, tuning_job: str, perturb_config: str = None, clean_first: bool = False):
     """
@@ -199,12 +205,9 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
     Orchestrates a study by tuning a model on original data once, then
     evaluating it against the original and multiple perturbed dataset families.
     """
-    print("="*80)
-    print("🧹 PRE-FLIGHT CHECK: Cleaning data directory. 🧹")
-    print("="*80)
-    clean_data_directory() # Call the new function
     
     project_root = Path(find_project_root())
+    
     final_perturb_configs = []
     if use_all_perturbations:
         perturbation_dir = project_root / "configs" / "perturbation"
@@ -230,19 +233,18 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
         print("Please use either the '--perturb-configs' argument with a list of files,")
         print("or use the '--all-perturbations' flag to run all.")
         return
+    
 
+    # --- Step 1: Data Generation (ALWAYS runs for the base dataset) ---
     print("="*80)
-    print("🚀 STARTING FULL PERTURBATION STUDY PIPELINE 🚀")
+    print("🚀 STARTING PERTURBATION STUDY 🚀")
     print("="*80)
-
-    # --- Step 1: Generate the original multi-seed datasets ---
-    print("\n[STEP 1/5] Generating original multi-seed datasets...")
+    print("\n[STEP 1/5] Generating fresh base dataset (this step always runs)...")
+    clean_data_directory() # Clean all .csv files first
     generate_multi_seed(base_config_path=base_data_config)
     print("✅ Original datasets generated successfully.")
 
-    # --- Step 2: Run hyperparameter tuning ONCE on the clean data ---
-    print(f"\n[STEP 2/5] Launching hyperparameter tuning job '{tuning_job}' on clean data...")
-    # Find the path to the unperturbed training data config
+    # --- Determine paths and check if tuning can be skipped ---
     with open(base_data_config, "r") as f:
         data_conf_dict = yaml.safe_load(f)
     training_data_conf_dict = data_conf_dict.copy()
@@ -250,91 +252,62 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
     temp_base_name = create_filename_from_config(training_data_conf_dict)
     training_base_name = temp_base_name.replace(f"_seed{TRAINING_SEED}", "_training")
     training_data_config_path = project_root / "configs" / "data_generation" / f"{training_base_name}_config.yml"
-
     with open(project_root / "configs" / "experiments.yml", "r") as f:
         job_params = yaml.safe_load(f)["tuning_jobs"][tuning_job]
     base_training_config_path = project_root / job_params["base_training_config"]
     model_name_suffix = base_training_config_path.stem
     optimal_config_path = project_root / "configs" / "training" / "generated" / f"{training_base_name}_{model_name_suffix}_optimal.yml"
     final_model_path = project_root / "models" / f"{training_base_name}_{model_name_suffix}_optimal_model.pt"
-
-    # Now, check if these artifacts exist
+    
+    # Step 2 & 3: Run Tuning if needed
     if optimal_config_path.exists() and final_model_path.exists():
-        print("\n[INFO] Found existing optimal model and configuration.")
-        print(f"Skipping initial data generation and hyperparameter tuning.")
+        print("\n[INFO] Found existing optimal model. Skipping hyperparameter tuning.")
     else:
-        print("\n[INFO] No existing optimal model found. Starting full pipeline from scratch.")
-        # --- Step 1: Generate the original multi-seed datasets ---
-        print("\n[STEP 1/5] Generating original multi-seed datasets...")
-        generate_multi_seed(base_config_path=base_data_config)
-        print("✅ Original datasets generated successfully.")
-
-        # --- Step 2: Run hyperparameter tuning ONCE on the clean data ---
-        print(f"\n[STEP 2/5] Launching hyperparameter tuning job '{tuning_job}' on clean data...")
+        print("\n[INFO] No existing optimal model found. Running tuning.")
+        print(f"\n[STEP 2/5] Launching hyperparameter tuning job '{tuning_job}'...")
         run_experiments(job=tuning_job, data_config_path=str(training_data_config_path))
+        print("\n[STEP 3/5] Analyzing tuning results (INTERACTIVE)...")
         run_tuning_analysis(
             data_config=str(training_data_config_path),
             base_training_config=str(base_training_config_path),
             sample_fraction=job_params["sample_fraction"],
             non_interactive=False
         )
-        print("✅ Hyperparameter tuning and model finalization complete.")
-
-    # --- Step 3: Evaluate the optimal model on the ORIGINAL dataset family ---
-    print("\n[STEP 3/5] Evaluating model on the original (unperturbed) dataset family...")
     
-    from src.utils.filenames import metrics_filename 
-    orig_family_base = Path(base_data_config).stem.split('_seed')[0]
-    orig_metrics_path = project_root / "models" / metrics_filename(orig_family_base, model_name_suffix, seed=0, optimized=False)
-
-    if orig_metrics_path.exists():
-        print(f"--- Results for original family found at '{orig_metrics_path}'. Skipping evaluation. ---")
-    else:
-        evaluate_multi_seed(
-            trained_model_path=str(final_model_path),
-            data_config_base=str(base_data_config),
-            optimal_config=str(optimal_config_path)
-        )
-        print("✅ Baseline evaluation complete.")
-
-    # --- Step 4: Loop through perturbations, apply them, and evaluate ---
-    print("\n[STEP 4/5] Applying and evaluating each perturbation...")
-    for i, p_config in enumerate(final_perturb_configs):
-        print(f"\n--- Perturbation {i+1}/{len(final_perturb_configs)}: {p_config} ---")
+    # --- Step 4: Evaluate Baseline and Perturbations ---
+    print("\n[STEP 4/5] Evaluating model on all dataset families...")
+    
+    # Evaluate baseline (has internal checks to skip if metrics exist)
+    print("\n--- Evaluating on original (unperturbed) dataset family ---")
+    evaluate_multi_seed(
+        trained_model_path=str(final_model_path),
+        data_config_base=str(base_data_config),
+        optimal_config=str(optimal_config_path)
+    )
+    
+    # Loop through perturbations
+    for p_config in final_perturb_configs:
+        print(f"\n--- Processing perturbation: {p_config} ---")
         
+        # ALWAYS perturb the data to ensure it's fresh
+        perturb_multi_seed(data_config_base=base_data_config, perturb_config=p_config)
+        
+        # THEN evaluate (which will use its own internal checks)
         pert_tag_match = re.search(r'pert_.*', Path(p_config).stem)
-        if not pert_tag_match:
-            print(f"Warning: Could not extract perturbation tag from '{p_config}'. Skipping.")
-            continue
+        pert_tag = pert_tag_match.group(0) if pert_tag_match else Path(p_config).stem
+        orig_family_base = Path(base_data_config).stem.split('_seed')[0]
+        pert_family_base_config = project_root / "configs/data_generation" / f"{orig_family_base}_{pert_tag}_seed0_config.yml"
         
-        pert_tag = pert_tag_match.group(0)
-        pert_family_base = f"{orig_family_base}_{pert_tag}"
-        pert_metrics_path = project_root / "models" / metrics_filename(orig_family_base, model_name_suffix, seed=0, perturbation_tag=pert_tag, optimized=False)
+        if pert_family_base_config.exists():
+            evaluate_multi_seed(
+                trained_model_path=str(final_model_path),
+                data_config_base=str(pert_family_base_config),
+                optimal_config=str(optimal_config_path)
+            )
+    print("✅ All perturbation families evaluated.")
 
-        if pert_metrics_path.exists():
-            print(f"--- Results for perturbed family '{pert_tag}' found. Skipping generation and evaluation. ---")
-        else:
-            print(f"--- No results found for '{pert_tag}'. Running perturbation and evaluation. ---")
-            # Apply the perturbation to the original data
-            perturb_multi_seed(data_config_base=base_data_config, perturb_config=p_config)
-            
-            # Find the path to the newly created perturbed dataset family config
-            pert_family_base_config = project_root / "configs/data_generation" / f"{pert_family_base}_seed0_config.yml"
-            
-            # Evaluate the same optimal model on the perturbed data
-            if pert_family_base_config.exists():
-                evaluate_multi_seed(
-                    trained_model_path=str(final_model_path),
-                    data_config_base=str(pert_family_base_config),
-                    optimal_config=str(optimal_config_path)
-                )
-            else:
-                print(f"Warning: Could not find perturbed config at '{pert_family_base_config}'. Evaluation skipped.")
-
-    print("✅ All perturbations evaluated.")
-    
-    # --- Step 5: Aggregate all results and generate comparisons (this step should always run) ---
-    print("\n[STEP 5/5] Aggregating all results and generating final comparisons...")
+    # --- Step 5: Aggregation (ALWAYS runs) ---
+    print("\n[STEP 5/5] Aggregating all results...")
     aggregate_all_families(optimal_config=str(optimal_config_path))
     print("✅ Aggregation and comparison complete.")
 
