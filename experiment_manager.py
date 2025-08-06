@@ -34,15 +34,51 @@ os.environ['NUMEXPR_NUM_THREADS'] = '1'
 
 TRAINING_SEED = 99
 
+def clean_data_directory():
+    """Deletes all .csv files from the data directory."""
+    try:
+        project_root = Path(find_project_root())
+        data_dir = project_root / "data"
+
+        if not data_dir.exists():
+            print(f"Info: Data directory '{data_dir}' does not exist. Nothing to clean.")
+            return
+
+        print(f"\nScanning for .csv files in '{data_dir}'...")
+        csv_files = list(data_dir.glob("*.csv"))
+
+        if not csv_files:
+            print("Data directory is already clean (no .csv files found).")
+            return
+
+        print(f"Found {len(csv_files)} .csv files to delete.")
+        for f in csv_files:
+            try:
+                f.unlink()
+                print(f" - Deleted {f.name}")
+            except Exception as e:
+                print(f" - Error deleting {f.name}: {e}")
+        
+        print("✅ Data directory cleaned successfully.")
+
+    except Exception as e:
+        print(f"An error occurred during cleanup: {e}")
+        
 def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: str = None):
     """
     Orchestrates the entire ML pipeline from data generation to final comparison
     by calling functions directly for improved efficiency and robustness.
     """
-    project_root = Path(find_project_root())
+  
+    print("="*80)
+    print("🧹 PRE-FLIGHT CHECK: Cleaning data directory. 🧹")
+    print("="*80)
+    clean_data_directory() # Call the new function
+
     print("="*80)
     print("🚀 STARTING FULL AUTOMATED PIPELINE 🚀")
     print("="*80)
+
 
     # --- Step 1: Generate multi-seed datasets ---
     print("\n[STEP 1/6] Generating multi-seed datasets...")
@@ -214,7 +250,7 @@ def main():
     pipe.add_argument("--base-data-config", required=True, type=str, help="Path to the base data config for the experiment.")
     pipe.add_argument("--tuning-job", required=True, type=str, help="Name of the tuning job from experiments.yml.")
     pipe.add_argument("--perturb-config", type=str, default=None, help="Optional: Path to a perturbation config YAML.")
-
+    
     args = parser.parse_args()
 
     if args.command == "generate":

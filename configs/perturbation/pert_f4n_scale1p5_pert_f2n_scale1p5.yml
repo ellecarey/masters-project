@@ -1,0 +1,8 @@
+perturbation_settings:
+  - feature: "feature_4"
+    class_label: 0  # 0 for noise, 1 for signal
+    scale_factor: 1.5 # Apply a 1.5x multiplicative scaling
+  - feature: "feature_2"
+    class_label: 0  # 0 for noise, 1 for signal
+    scale_factor: 1.5 # Apply a 1.5x multiplicative scaling
+    

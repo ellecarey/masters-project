@@ -1,0 +1,61 @@
+create_feature_based_signal_noise_classification:
+  feature_types:
+    feature_0: discrete
+    feature_1: discrete
+    feature_2: discrete
+    feature_3: discrete
+    feature_4: discrete
+  noise_features:
+    feature_0:
+      mean: 0.0
+      std: 2.5
+    feature_1:
+      mean: 4.0
+      std: 2.2
+    feature_2:
+      mean: 1.0
+      std: 3.0
+    feature_3:
+      mean: 3.0
+      std: 2.0
+    feature_4:
+      mean: 1.0
+      std: 1.8
+  signal_features:
+    feature_0:
+      mean: 7.0
+      std: 1.8
+    feature_1:
+      mean: -3.0
+      std: 3.0
+    feature_2:
+      mean: 6.0
+      std: 1.5
+    feature_3:
+      mean: -2.0
+      std: 2.5
+    feature_4:
+      mean: 2.5
+      std: 1.0
+dataset_settings:
+  n_initial_features: 5
+  n_samples: 1000000
+global_settings:
+  random_seed: 7
+perturbation_settings:
+- class_label: 1
+  correlation_matrix:
+  - - 1.0
+    - 0.8
+  - - 0.8
+    - 1.0
+  description: Sensor drift correlation
+  features:
+  - feature_0
+  - feature_4
+  scale_factor: 1.5
+  type: correlated
+visualisation:
+  max_features_to_show: 5
+  n_bins: 25
+  save_to_dir: reports/figures/
