@@ -63,6 +63,36 @@ def clean_data_directory():
 
     except Exception as e:
         print(f"An error occurred during cleanup: {e}")
+
+def clean_specific_family_data(family_base_name: str):
+    """
+    Deletes all CSV dataset files associated with a specific experiment family.
+    """
+    try:
+        project_root = Path(find_project_root())
+        data_dir = project_root / "data"
+        if not data_dir.exists():
+            return
+
+        # Create a glob pattern to find all dataset files for the given family
+        file_pattern = f"{family_base_name}_seed*_dataset.csv"
+        csv_files_to_delete = list(data_dir.glob(file_pattern))
+
+        if not csv_files_to_delete:
+            # This is normal if the files were already cleaned or never created
+            return
+
+        print(f"\n🧹 Cleaning up {len(csv_files_to_delete)} CSV files for family: {family_base_name}")
+        for f in csv_files_to_delete:
+            try:
+                f.unlink()
+            except OSError as e:
+                print(f" - Error deleting {f.name}: {e}")
+        print("✅ Family cleanup complete.")
+
+    except Exception as e:
+        print(f"An error occurred during specific family cleanup: {e}")
+
         
 def run_full_pipeline(base_data_config: str, tuning_job: str, perturb_config: str = None):
     """
@@ -205,26 +235,22 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
     Orchestrates a study by tuning a model on original data once, then
     evaluating it against the original and multiple perturbed dataset families.
     """
-    
     project_root = Path(find_project_root())
-    
     final_perturb_configs = []
+
     if use_all_perturbations:
         perturbation_dir = project_root / "configs" / "perturbation"
         if not perturbation_dir.exists():
             print(f"Error: The --all-perturbations flag was used, but the directory does not exist: {perturbation_dir}")
             return
-        
         # Find all .yml and .yaml files in the directory
         found_configs = sorted(list(perturbation_dir.glob("*.yml"))) + sorted(list(perturbation_dir.glob("*.yaml")))
-        
         if not found_configs:
             print(f"Warning: --all-perturbations specified, but no configuration files were found in {perturbation_dir}.")
         else:
             # Convert Path objects to strings relative to the project root for consistency
             final_perturb_configs = [str(p.relative_to(project_root)) for p in found_configs]
             print(f"Found {len(final_perturb_configs)} perturbation files to run in the study.")
-
     elif perturb_configs:
         final_perturb_configs = perturb_configs
     else:
@@ -233,7 +259,6 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
         print("Please use either the '--perturb-configs' argument with a list of files,")
         print("or use the '--all-perturbations' flag to run all.")
         return
-    
 
     # --- Step 1: Data Generation (ALWAYS runs for the base dataset) ---
     print("="*80)
@@ -247,18 +272,21 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
     # --- Determine paths and check if tuning can be skipped ---
     with open(base_data_config, "r") as f:
         data_conf_dict = yaml.safe_load(f)
+
     training_data_conf_dict = data_conf_dict.copy()
     training_data_conf_dict["global_settings"]["random_seed"] = TRAINING_SEED
     temp_base_name = create_filename_from_config(training_data_conf_dict)
     training_base_name = temp_base_name.replace(f"_seed{TRAINING_SEED}", "_training")
     training_data_config_path = project_root / "configs" / "data_generation" / f"{training_base_name}_config.yml"
+
     with open(project_root / "configs" / "experiments.yml", "r") as f:
         job_params = yaml.safe_load(f)["tuning_jobs"][tuning_job]
+
     base_training_config_path = project_root / job_params["base_training_config"]
     model_name_suffix = base_training_config_path.stem
     optimal_config_path = project_root / "configs" / "training" / "generated" / f"{training_base_name}_{model_name_suffix}_optimal.yml"
     final_model_path = project_root / "models" / f"{training_base_name}_{model_name_suffix}_optimal_model.pt"
-    
+
     # Step 2 & 3: Run Tuning if needed
     if optimal_config_path.exists() and final_model_path.exists():
         print("\n[INFO] Found existing optimal model. Skipping hyperparameter tuning.")
@@ -271,12 +299,11 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
             data_config=str(training_data_config_path),
             base_training_config=str(base_training_config_path),
             sample_fraction=job_params["sample_fraction"],
-            non_interactive=False
+            non_interactive=False,
         )
-    
+
     # --- Step 4: Evaluate Baseline and Perturbations ---
     print("\n[STEP 4/5] Evaluating model on all dataset families...")
-    
     # Evaluate baseline (has internal checks to skip if metrics exist)
     print("\n--- Evaluating on original (unperturbed) dataset family ---")
     evaluate_multi_seed(
@@ -284,26 +311,31 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
         data_config_base=str(base_data_config),
         optimal_config=str(optimal_config_path)
     )
-    
+
     # Loop through perturbations
     for p_config in final_perturb_configs:
         print(f"\n--- Processing perturbation: {p_config} ---")
-        
         # ALWAYS perturb the data to ensure it's fresh
         perturb_multi_seed(data_config_base=base_data_config, perturb_config=p_config)
-        
+
         # THEN evaluate (which will use its own internal checks)
         pert_tag_match = re.search(r'pert_.*', Path(p_config).stem)
         pert_tag = pert_tag_match.group(0) if pert_tag_match else Path(p_config).stem
         orig_family_base = Path(base_data_config).stem.split('_seed')[0]
         pert_family_base_config = project_root / "configs/data_generation" / f"{orig_family_base}_{pert_tag}_seed0_config.yml"
-        
+        pert_family_base_name = pert_family_base_config.stem.rsplit('_seed', 1)[0]
+
+
         if pert_family_base_config.exists():
             evaluate_multi_seed(
                 trained_model_path=str(final_model_path),
                 data_config_base=str(pert_family_base_config),
                 optimal_config=str(optimal_config_path)
             )
+
+        # Clean up the perturbed data immediately after evaluation
+        clean_specific_family_data(family_base_name=pert_family_base_name)
+
     print("✅ All perturbation families evaluated.")
 
     # --- Step 5: Aggregation (ALWAYS runs) ---

@@ -8,7 +8,10 @@ def generate_global_tracking_sheet():
     """
     Scans for all completed experiment families, gathers their summary statistics
     and configuration details, and compiles them into a single master CSV file.
-    This version loads the existing tracking sheet and updates it to preserve history.
+
+    This version dynamically finds the correct optimal configuration for each
+    base family to ensure accurate model and trial number reporting. It also
+    loads the existing tracking sheet to update it and preserve history.
     """
     project_root = Path(find_project_root())
     spreadsheets_dir = project_root / "reports" / "spreadsheets"
@@ -21,7 +24,6 @@ def generate_global_tracking_sheet():
         return
 
     all_summary_files = list(spreadsheets_dir.glob("**/*_summary.csv"))
-
     if not all_summary_files:
         print(f"Info: No new summary CSV files found in '{spreadsheets_dir}'. Global tracker will not be modified.")
         return
@@ -36,19 +38,21 @@ def generate_global_tracking_sheet():
         # 1. Load summary stats from the CSV
         summary_df = pd.read_csv(summary_file, index_col=0)
 
-        # 2. Correctly locate the data generation config file
+        # 2. Correctly locate the data generation config file to get data details
+        # This assumes the config for seed 0 is always present for a family
         data_config_path = project_root / "configs" / "data_generation" / f"{family_name}_seed0_config.yml"
         if not data_config_path.exists():
             print(f"Warning: Could not find data config for family '{family_name}' at '{data_config_path}'. Skipping.")
             continue
         data_config = load_yaml_config(data_config_path)
 
-        # 3. Dynamically find the corresponding optimal training config
-        base_family_name = re.sub(r'(_pert_.*|_seed.*|_training.*)', '', family_name)
+        # 3. Dynamically find the corresponding optimal training config for THIS family
+        # Strip away perturbation and seed info to get the base name that was tuned.
+        # e.g., 'n1000...sep5p1_pert_f4n_by1p0s' -> 'n1000...sep5p1'
+        base_family_name = re.sub(r'(_pert_.*|_seed.*)', '', family_name)
         
-        # Construct the expected optimal config name based on the training dataset
-        # e.g., n1000..._training_mlp_001_optimal.yml
-        optimal_config_pattern = f"{base_family_name}_training_*_optimal.yml"
+        # Use a glob pattern to find the optimal config for this base family.
+        optimal_config_pattern = f"{base_family_name}_*_optimal.yml"
         found_configs = list(generated_configs_dir.glob(optimal_config_pattern))
 
         optimal_trial_number = 'N/A'
@@ -61,35 +65,51 @@ def generate_global_tracking_sheet():
                 print(f"Warning: Found multiple optimal configs for '{base_family_name}'. Using the first one: {found_configs[0]}")
             optimal_config_path = found_configs[0]
             optimal_config = load_yaml_config(optimal_config_path)
-            optimal_trial_number = optimal_config.get("training_settings", {}).get("optimal_trial_number", "N/A")
             model_name = optimal_config.get("training_settings", {}).get("model_name", "N/A")
+            optimal_trial_number = optimal_config.get("training_settings", {}).get("optimal_trial_number", "N/A")
 
         # 4. Extract all required details for the spreadsheet row
         dataset_settings = data_config.get("dataset_settings", {})
         class_config = data_config.get("create_feature_based_signal_noise_classification", {})
         n_samples = dataset_settings.get("n_samples", "N/A")
         n_features = dataset_settings.get("n_initial_features", "N/A")
+
         feature_types = class_config.get("feature_types", {})
         continuous = sum(1 for v in feature_types.values() if v == 'continuous')
         discrete = sum(1 for v in feature_types.values() if v == 'discrete')
+
         signal_features = class_config.get("signal_features", {})
         noise_features = class_config.get("noise_features", {})
         separations = [abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0)) for f in signal_features if f in noise_features]
         avg_separation = sum(separations) / len(separations) if separations else 0.0
 
+        # Improved perturbation description logic to handle multiple perturbations
         perturbation_info = "original"
         if "perturbation_settings" in data_config and data_config["perturbation_settings"]:
-            pert = data_config["perturbation_settings"][0]
-            pert_class = 'noise' if pert.get('class_label') == 0 else 'signal'
-            feature = pert.get('feature', 'N/A')
-            
-            # Check for scale_factor first, then sigma_shift
-            if 'scale_factor' in pert:
-                scale_val = pert.get('scale_factor', 'N/A')
-                perturbation_info = f"perturbed: {feature} ({pert_class}) by {scale_val}x"
-            elif 'sigma_shift' in pert:
-                shift_val = pert.get('sigma_shift', 'N/A')
-                perturbation_info = f"perturbed: {feature} ({pert_class}) by {shift_val}s"
+            pert_descs = []
+            for p_config in data_config["perturbation_settings"]:
+                p_type = p_config.get("type", "individual")
+                class_label_raw = p_config.get('class_label')
+                class_label = 'noise' if class_label_raw == 0 else 'signal' if class_label_raw == 1 else 'N/A'
+
+                if p_type == 'correlated':
+                    features = p_config.get('features', [])
+                    feature_str = '+'.join([f.replace('feature_', 'F') for f in features]) if len(features) <= 2 else f"{len(features)} feats"
+                    desc = f"Corr {feature_str} ({class_label})"
+                    if 'scale_factor' in p_config:
+                        desc += f" by {p_config['scale_factor']}x"
+                    elif 'sigma_shift' in p_config:
+                        desc += f" by {p_config['sigma_shift']}s"
+                    pert_descs.append(desc)
+                else:  # individual
+                    feature = p_config.get('feature', 'N/A').replace('feature_', 'F')
+                    desc = f"{feature} ({class_label})"
+                    if 'scale_factor' in p_config:
+                        desc += f" scaled by {p_config['scale_factor']}x"
+                    elif 'sigma_shift' in p_config:
+                        desc += f" shifted by {p_config['sigma_shift']}s"
+                    pert_descs.append(desc)
+            perturbation_info = "; ".join(pert_descs)
 
         metrics_mean = summary_df['mean'].to_dict()
         metrics_std = summary_df['std'].to_dict()
@@ -119,9 +139,7 @@ def generate_global_tracking_sheet():
     if output_path.exists():
         try:
             existing_df = pd.read_csv(output_path)
-            # Combine old and new data, replacing old rows with new ones if the experiment family matches
             combined_df = pd.concat([existing_df, new_data_df]).drop_duplicates(subset=['experiment_family'], keep='last')
-            # Sort to keep the file tidy
             global_df = combined_df.sort_values(by="experiment_family").reset_index(drop=True)
             print(f"Updated global tracking sheet. Total records: {len(global_df)}")
         except Exception as e:
@@ -136,7 +154,6 @@ def generate_global_tracking_sheet():
         "experiment_family", "model", "n_samples", "n_features", "continuous", "discrete",
         "separation", "perturbation", "optimal_trial_num"
     ]
-    
     metric_cols = sorted(list(set([col.replace('_mean', '').replace('_std', '') for col in global_df.columns if col.endswith(('_mean', '_std')) and col not in leading_cols])))
     
     ordered_columns = leading_cols.copy()
@@ -146,15 +163,14 @@ def generate_global_tracking_sheet():
         if f"{metric}_std" in global_df.columns:
             ordered_columns.append(f"{metric}_std")
 
-    # Ensure all columns from the DataFrame are included in the final list
     existing_cols = set(global_df.columns)
     final_ordered_columns = [col for col in ordered_columns if col in existing_cols]
     remaining_cols = sorted([col for col in existing_cols if col not in final_ordered_columns])
     final_ordered_columns.extend(remaining_cols)
-    
-    global_df = global_df[final_ordered_columns]
 
+    global_df = global_df[final_ordered_columns]
     global_df.to_csv(output_path, index=False)
+
     print("\n✓ Global experiment tracking sheet updated successfully!")
     print(f"Saved to: {output_path}")
 

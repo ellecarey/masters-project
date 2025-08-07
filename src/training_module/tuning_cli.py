@@ -496,7 +496,7 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
 
     candidate_info = []
     trained_models = {}
-    max_workers = min(3, os.cpu_count() or 1, len(top_trials))
+    max_workers = min(5, os.cpu_count() or 1, len(top_trials))
     
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_rank = {executor.submit(train_candidate_worker, args): i for i, args in enumerate(trial_args)}

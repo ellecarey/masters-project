@@ -308,7 +308,8 @@ def evaluate_multi_seed(trained_model_path: str, data_config_base: str, optimal_
     dataset_family_name = base_data_config_path.stem.replace('_config', '').split('_seed')[0]
     data_config_dir = project_root / "configs" / "data_generation"
 
-    all_data_configs = sorted(list(data_config_dir.glob(f"{dataset_family_name}*_config.yml")))
+    glob_pattern = f"{dataset_family_name}_seed*_config.yml"
+    all_data_configs = sorted(list(data_config_dir.glob(glob_pattern)))
     # Exclude the training seed from evaluation
     evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
 
