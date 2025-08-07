@@ -122,7 +122,7 @@ def train_single_config(data_config_path: str, training_config_path: str):
     early_stopping_settings = train_settings.get("early_stopping_settings", {})
     patience = early_stopping_settings.get("patience", 10)
 
-    trained_model, history = train_model(
+    trained_model, history, _ = train_model(
         model=model, train_loader=train_loader, validation_loader=val_loader,
         criterion=criterion, optimiser=optimiser, epochs=hyperparams["epochs"], device=device,
         scheduler=scheduler,

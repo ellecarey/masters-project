@@ -17,7 +17,9 @@ def train_model(
     trial: optuna.trial.Trial = None,
     verbose: bool = False,
     early_stopping_enabled: bool = True,
-    patience: int = 5,
+    patience: int = 20,
+    min_delta: float = 1e-5
+    
 ):
     """
     Model training function that can run with or without a validation loader.
@@ -32,6 +34,7 @@ def train_model(
 
     best_val_loss = float('inf')
     best_model_state = None
+    best_epoch = 0
     epochs_no_improve = 0
     epoch_iterator = tqdm(range(epochs), desc="Training Progress", unit="epoch", disable=not verbose)
 
@@ -89,22 +92,21 @@ def train_model(
         post_epoch_train_acc = correct_post_train / total_post_train
         history["train_acc_epoch_end"].append(post_epoch_train_acc)
 
-        # MODIFIED: Update progress bar conditionally
         if verbose:
             postfix_data = {"Train Acc (End)": f"{post_epoch_train_acc:.4f}"}
             if validation_loader:
                 postfix_data["Val Acc"] = f"{val_accuracy:.4f}"
             epoch_iterator.set_postfix(postfix_data)
         
-        # MODIFIED: Scheduler and Early Stopping Logic now depend on validation
         if scheduler and avg_val_loss is not None:
             scheduler.step(avg_val_loss)
             
         if early_stopping_enabled and avg_val_loss is not None:
-            if avg_val_loss < best_val_loss:
+            if avg_val_loss < best_val_loss - min_delta:
                 best_val_loss = avg_val_loss
                 epochs_no_improve = 0
                 best_model_state = copy.deepcopy(model.state_dict())
+                best_epoch = epoch + 1
             else:
                 epochs_no_improve += 1
             
@@ -119,8 +121,8 @@ def train_model(
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-    # MODIFIED: Only load best state if early stopping was active and a state was saved
     if early_stopping_enabled and best_model_state is not None:
         model.load_state_dict(best_model_state)
+    final_epoch_to_report = best_epoch if best_epoch > 0 else epochs
         
-    return model, history
+    return model, history, best_epoch

@@ -89,9 +89,9 @@ def train_candidate_worker(args):
         factor=scheduler_settings.get('factor', 0.1),
         patience=scheduler_settings.get('patience', 5)
     )
-    patience = min(early_stopping_settings.get("patience", 10), 5)
+    patience = early_stopping_settings.get("patience", 20)
 
-    trained_model, history = train_model(
+    trained_model, history, _ = train_model(
         model=model,
         train_loader=train_loader,
         validation_loader=val_loader,
@@ -221,7 +221,7 @@ def run_hyperparameter_tuning(
         )
         start_time = time.time()
         try:
-            trained_model, history = train_model(
+            trained_model, history, best_epoch = train_model(
                 model=model,
                 train_loader=train_loader,
                 validation_loader=val_loader,
@@ -230,12 +230,14 @@ def run_hyperparameter_tuning(
                 epochs=epochs,
                 device=device,
                 trial=trial,
+                early_stopping_enabled=True,
+                patience=tuning_config_dict.get("early_stopping_settings", {}).get("patience", 20)
             )
         except optuna.TrialPruned:
             raise
         training_time = time.time() - start_time
         trial.set_user_attr("training_time", training_time)
-
+        trial.set_user_attr("best_epoch", best_epoch)
 
         trained_model.eval()
         val_loss = 0.0
@@ -361,6 +363,14 @@ def run_experiments(job: str, data_config_path: str = None):
         "--sample-fraction", str(job_params["sample_fraction"]),
     ]
 
+    # uncomment for worker debugging
+    # workers = [
+    #     subprocess.Popen(command, cwd=project_root)
+    #     for _ in range(job_params['num_workers'])
+    # ]
+
+    # print(f"All {len(workers)} workers launched. Monitoring study progress...")
+    
     workers = [
         subprocess.Popen(command, cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(job_params['num_workers'])
@@ -571,6 +581,15 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     print(f"Full dataset for final training contains: {len(X_full)} samples.")
     
     final_params = selected_trial.params
+    best_epoch_for_final_run = selected_trial.user_attrs.get("best_epoch")
+    if not best_epoch_for_final_run:
+        print(f"Warning: 'best_epoch' not found in Trial #{selected_trial.number}. Falling back to the full number of epochs from the trial's parameters.")
+        epochs_for_final_run = final_params["epochs"]
+    else:
+        epochs_for_final_run = best_epoch_for_final_run
+        print(f"Using optimal epoch number from tuning: {epochs_for_final_run} epochs.")
+
+    
     model_name_arch = tuning_config.get("model_name", "mlp_001")
     ARCH_PARAMS = {"mlp_001": {"hidden_size"}}
     model_params = {
@@ -586,13 +605,13 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     
     final_optimiser = torch.optim.Adam(final_model.parameters(), lr=final_params["learning_rate"])
 
-    final_model, final_history = train_model(
+    final_model, final_history, _ = train_model(
         model=final_model,
         train_loader=full_train_loader,
         validation_loader=None,
         criterion=nn.BCEWithLogitsLoss(),
         optimiser=final_optimiser,
-        epochs=final_params["epochs"],
+        epochs=epochs_for_final_run,
         device=device,
         verbose=True,
         scheduler=None,
