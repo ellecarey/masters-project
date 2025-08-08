@@ -26,22 +26,22 @@ def generate_subtitle_from_config(config: dict) -> str:
         pert_settings = config.get("perturbation_settings")
         pert_desc = _process_perturbation_settings(pert_settings)
         
-        # Calculate separation with error handling
         signal_features = class_config.get("signal_features", {})
         noise_features = class_config.get("noise_features", {})
         
-        try:
-            separations = []
-            for f in signal_features:
-                if f in noise_features:
-                    sig_mean = signal_features[f].get('mean', 0)
-                    noise_mean = noise_features[f].get('mean', 0)
-                    separations.append(abs(sig_mean - noise_mean))
-            
-            avg_separation = sum(separations) / len(separations) if separations else 0.0
-            separation_desc = f"Avg. Separation: {avg_separation:.2f}"
-        except (KeyError, TypeError, ValueError) as e:
-            separation_desc = "Avg. Separation: N/A"
+        separations = []
+        for f_name, s_params in signal_features.items():
+            if f_name in noise_features:
+                n_params = noise_features[f_name]
+                mean_diff = abs(s_params.get('mean', 0) - n_params.get('mean', 0))
+                s_std = s_params.get('std', 1)
+                n_std = n_params.get('std', 1)
+                if (s_std**2 + n_std**2) > 0:
+                    d = mean_diff / ((s_std**2 + n_std**2)**0.5)
+                    separations.append(d)
+
+        overall_separation = (sum(d**2 for d in separations))**0.5 if separations else 0.0
+        separation_desc = f"Std. Separation: {overall_separation:.2f}"
         
         subtitle = (
             f"Dataset: {n_samples:,} Samples, {feature_desc}\n"
