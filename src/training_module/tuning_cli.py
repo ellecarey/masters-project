@@ -170,10 +170,11 @@ def run_hyperparameter_tuning(
     study = optuna.load_study(study_name=study_name, storage=storage_name)
     print(f"\nWorker starting on study '{study_name}' on device: '{device}'")
 
-    def objective(trial):
+    def objective(trial: optuna.trial.Trial) -> float:
+        # Sample data for the trial
         X_full = full_data.drop(columns=["target"])
         y_full = full_data["target"]
-
+        
         if sample_fraction < 1.0:
             X_sample, _, y_sample, _ = train_test_split(
                 X_full, y_full, train_size=sample_fraction, stratify=y_full, random_state=trial.number
@@ -181,29 +182,31 @@ def run_hyperparameter_tuning(
         else:
             X_sample, y_sample = X_full, y_full
 
+        # Define hyperparameter search space
         search_space = tuning_config_dict["search_space"]
         hyperparams = {}
-        for param_name, params_config in search_space.items():
-            params = copy.copy(params_config)
-            param_type = params.pop("type")
-            if param_type == "int":
-                hyperparams[param_name] = trial.suggest_int(param_name, **params)
-            elif param_type == "float":
-                hyperparams[param_name] = trial.suggest_float(param_name, **params)
-            elif param_type == "categorical":
-                hyperparams[param_name] = trial.suggest_categorical(param_name, **params)
+        for param, config in search_space.items():
+            # Create a copy to avoid modifying the original dictionary
+            config_copy = config.copy()
+            # Pop the 'type' key as it's not a valid argument for Optuna's suggest methods
+            param_type = config_copy.pop("type")
 
-        epochs = hyperparams["epochs"]
+            if param_type == "categorical":
+                hyperparams[param] = trial.suggest_categorical(param, **config_copy)
+            elif param_type == "float":
+                hyperparams[param] = trial.suggest_float(param, **config_copy)
+            elif param_type == "int":
+                hyperparams[param] = trial.suggest_int(param, **config_copy)
+        
+        # Setup model, data, and training components
         model_name = tuning_config_dict["model_name"]
         ARCH_PARAMS = {"mlp_001": {"hidden_size"}}
         model_params = {key: hyperparams[key] for key in hyperparams if key in ARCH_PARAMS.get(model_name, set())}
         model_params["input_size"] = X_sample.shape[1]
         model_params["output_size"] = 1
-
         model = get_model(model_name, model_params)
 
         data_utils.set_global_seed(trial.number)
-
         X_train, X_val, y_train, y_val = train_test_split(
             X_sample, y_sample, test_size=0.2, random_state=trial.number, stratify=y_sample
         )
@@ -217,17 +220,19 @@ def run_hyperparameter_tuning(
         optimiser = torch.optim.Adam(
             model.parameters(),
             lr=hyperparams["learning_rate"],
-            weight_decay=hyperparams["weight_decay"] 
+            weight_decay=hyperparams.get("weight_decay", 0.0) # Use .get for optional params
         )
+
         start_time = time.time()
         try:
-            trained_model, history, best_epoch = train_model(
+            # The corrected train_model now returns a history dictionary with AUC
+            _, history, best_epoch = train_model(
                 model=model,
                 train_loader=train_loader,
                 validation_loader=val_loader,
                 criterion=criterion,
                 optimiser=optimiser,
-                epochs=epochs,
+                epochs=hyperparams["epochs"],
                 device=device,
                 trial=trial,
                 early_stopping_enabled=True,
@@ -235,26 +240,29 @@ def run_hyperparameter_tuning(
             )
         except optuna.TrialPruned:
             raise
+
         training_time = time.time() - start_time
+
+        # --- Retrieve final validation AUC from history ---
+        # The history from train_model now includes 'val_auc'. We get the last value.
+        final_val_auc = history.get("val_auc", [0.0])[-1]
+        final_val_loss = history.get("val_loss", [float('inf')])[-1]
+
+        # --- Store useful metrics as user attributes for later analysis ---
         trial.set_user_attr("training_time", training_time)
         trial.set_user_attr("best_epoch", best_epoch)
-
-        trained_model.eval()
-        val_loss = 0.0
-        with torch.no_grad():
-            for features, labels in val_loader:
-                features, labels = features.to(device), labels.to(device)
-                outputs = trained_model(features)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
+        trial.set_user_attr("final_val_auc", final_val_auc)
+        trial.set_user_attr("final_val_loss", final_val_loss)
         
-        avg_val_loss = val_loss / len(val_loader)
-        
-        # Return the validation loss for minimization.
-        return avg_val_loss
+        # --- Return the value for Optuna to optimize ---
+        # The study is configured to MINIMIZE the objective's return value.
+        # To MAXIMIZE AUC, we return (1.0 - AUC).
+        return 1.0 - final_val_auc
 
+    # Run the optimization
     study.optimize(objective, n_trials=n_trials)
     print(f"\nWorker has finished its trials for study '{study_name}'.")
+
 
 
 def run_experiments(job: str, data_config_path: str = None):

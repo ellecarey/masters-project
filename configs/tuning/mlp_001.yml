@@ -3,35 +3,70 @@ model_name: "mlp_001"
 search_space:
     hidden_size:
         type: int
-        low: 48
-        high: 260      
-        step: 16
+        low: 40
+        high: 64
+        step: 8
     learning_rate:
         type: float
-        low: 1.0e-5
-        high: 1.0e-2
+        low: 2.0e-4
+        high: 2.0e-3
         log: true
     batch_size:
-        type: categorical 
-        choices: [512, 1024, 2048]
+        type: categorical
+        choices: [64, 128]
     epochs:
         type: int
-        low: 300      
+        low: 300
         high: 300
         step: 1
     weight_decay:
         type: float
-        low: 1.0e-5 
-        high: 1.0e-2  
-        log: True
+        low: 1.0e-4
+        high: 8.0e-3
+        log: true
 
 
+
+
+
+
+
+
+# 10 features 
 # model_name: "mlp_001"
-# baseline
+
 # search_space:
 #     hidden_size:
 #         type: int
-#         low: 4
+#         low: 32
+#         high: 80      
+#         step: 8
+#     learning_rate:
+#         type: float
+#         low: 1.0e-4
+#         high: 8.0e-4
+#         log: true
+#     batch_size:
+#         type: categorical 
+#         choices: [512]
+#     epochs:
+#         type: int
+#         low: 300      
+#         high: 300
+#         step: 1
+#     weight_decay:
+#         type: float
+#         low: 1.0e-3 
+#         high: 1.03e-2  
+#         log: True
+
+
+# model_name: "mlp_001"
+
+# search_space:
+#     hidden_size:
+#         type: int
+#         low: 48
 #         high: 260      
 #         step: 16
 #     learning_rate:
@@ -41,7 +76,7 @@ search_space:
 #         log: true
 #     batch_size:
 #         type: categorical 
-#         choices: [32, 64]
+#         choices: [512, 1024, 2048]
 #     epochs:
 #         type: int
 #         low: 300      
@@ -53,30 +88,3 @@ search_space:
 #         high: 1.0e-2  
 #         log: True
 
-# model_name: "mlp_001"
-#sep2.1
-
-# search_space:
-#     hidden_size:
-#         type: int
-#         low: 48
-#         high: 144
-#         step: 16
-#     learning_rate:
-#         type: float
-#         low: 1.0e-4
-#         high: 4.0e-3
-#         log: true
-#     batch_size:
-#         type: categorical
-#         choices: [32, 64]
-#     epochs:
-#         type: int
-#         low: 300
-#         high: 300
-#         step: 1
-#     weight_decay:
-#         type: float
-#         low: 1.0e-4
-#         high: 8.0e-3
-#         log: True

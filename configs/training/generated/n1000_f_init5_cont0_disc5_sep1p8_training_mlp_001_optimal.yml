@@ -12,10 +12,10 @@ training_settings:
   early_stopping_settings:
     patience: 10
   hyperparameters:
-    hidden_size: 244
+    hidden_size: 48
     output_size: 1
-    learning_rate: 0.0021569021389985683
+    learning_rate: 0.001528497888437032
     epochs: 300
-    batch_size: 32
-    weight_decay: 0.0037785053481911635
-  optimal_trial_number: 23
+    batch_size: 64
+    weight_decay: 0.00025515565793485305
+  optimal_trial_number: 31
