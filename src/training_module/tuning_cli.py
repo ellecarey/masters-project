@@ -62,6 +62,7 @@ def train_candidate_worker(args):
     trial_params = trial_data['params']
     training_time = trial_data.get('training_time', 'N/A')
 
+    # model_name = tuning_config_dict["model_name"]
     arch_model_name = tuning_config_data.get("model_name", "mlp_001")
     ARCH_PARAMS = {"mlp_001": {"hidden_size"}}
     model_params = {
@@ -72,7 +73,7 @@ def train_candidate_worker(args):
     model_params["input_size"] = X_train.shape[1]
     model_params["output_size"] = 1
 
-    model = get_model(arch_model_name, model_params)
+    model = get_model(model_name, model_params)
 
     train_dataset = TabularDataset(X_train, y_train)
     val_dataset = TabularDataset(X_val, y_val)
@@ -451,14 +452,14 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     output_plot_dir = project_root / "reports" / "figures" / base_family / dataset_base_name
     tuning_output_plot_dir = project_root / "reports" / "figures" / base_family / f"{model_name_suffix}_tuning"
 
-    # Delete directories if they exist
-    if output_plot_dir.exists():
-        shutil.rmtree(output_plot_dir)
-        print(f"Removed old directory: {output_plot_dir}")
+    # # Delete directories if they exist
+    # if output_plot_dir.exists():
+    #     shutil.rmtree(output_plot_dir)
+    #     print(f"Removed old directory: {output_plot_dir}")
     
-    if tuning_output_plot_dir.exists():
-        shutil.rmtree(tuning_output_plot_dir)
-        print(f"Removed old directory: {tuning_output_plot_dir}")
+    # if tuning_output_plot_dir.exists():
+    #     shutil.rmtree(tuning_output_plot_dir)
+    #     print(f"Removed old directory: {tuning_output_plot_dir}")
         
     # Recreate the main directory for candidate plots
     output_plot_dir.mkdir(parents=True, exist_ok=True)

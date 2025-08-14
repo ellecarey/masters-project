@@ -80,8 +80,20 @@ def generate_global_tracking_sheet():
 
         signal_features = class_config.get("signal_features", {})
         noise_features = class_config.get("noise_features", {})
-        separations = [abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0)) for f in signal_features if f in noise_features]
-        avg_separation = sum(separations) / len(separations) if separations else 0.0
+        
+        separations = []
+        for f_name, s_params in signal_features.items():
+            if f_name in noise_features:
+                n_params = noise_features[f_name]
+                mean_diff = abs(s_params.get('mean', 0) - n_params.get('mean', 0))
+                s_std = s_params.get('std', 1)
+                n_std = n_params.get('std', 1)
+                if (s_std**2 + n_std**2) > 0:
+                    d = mean_diff / ((s_std**2 + n_std**2)**0.5)
+                    separations.append(d)
+        
+        # Combine individual separations into one overall metric (root sum square)
+        overall_separation = (sum(d**2 for d in separations))**0.5 if separations else 0.0
 
         # Improved perturbation description logic to handle multiple perturbations
         perturbation_info = "original"
@@ -121,7 +133,7 @@ def generate_global_tracking_sheet():
             "n_features": n_features,
             "continuous": continuous,
             "discrete": discrete,
-            "separation": f"{avg_separation:.1f}",
+            "separation": f"{overall_separation:.2f}",
             "perturbation": perturbation_info,
             "optimal_trial_num": optimal_trial_number,
             **{f"{k}_mean": v for k, v in metrics_mean.items()},
