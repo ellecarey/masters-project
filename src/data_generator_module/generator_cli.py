@@ -233,10 +233,10 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
         with open(new_config_path, 'w') as f:
             yaml.dump(perturbed_config, f, default_flow_style=False)
         print(f"Saved new config to: {new_config_path.name}")
-        current_seed = data_config.get("global_settings", {}).get("random_seed", -1)
-        if current_seed == 0 and "visualisation" in data_config:
+        if "visualisation" in data_config:
             vis_config = data_config["visualisation"]
             main_title, subtitle = create_plot_title_from_config(perturbed_config)
+            
             subfolder = new_filename_base
             
             # Use family-based path structure

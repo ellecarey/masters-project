@@ -410,5 +410,3 @@ def plot_combined_training_histories(candidate_info: list, output_dir: str, mode
     plt.savefig(save_path, bbox_inches='tight')
     plt.close()
     print(f"Saved combined training history plot with fully adaptive axes to: {save_path}")
-
-

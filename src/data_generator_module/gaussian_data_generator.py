@@ -536,22 +536,28 @@ class GaussianDataGenerator:
         rng = np.random.RandomState(self.random_state + hash(tuple(feature_names)) % 2**31)
         
         if scale_factor is not None:
-            # For scaling, generate correlated multipliers
-            # Use log-normal distribution to ensure positive multipliers
-            mean_log = np.log(scale_factor)
-            cov_log = correlation_matrix * 0.1  # Small variance in log space
-            
-            log_multipliers = rng.multivariate_normal(
-                mean=[mean_log] * len(feature_names),
-                cov=cov_log,
-                size=n_samples
-            )
-            multipliers = np.exp(log_multipliers)
-            
-            # Apply correlated scaling
+            # Handle negative scale factors by separating sign from magnitude
+            sign = np.sign(scale_factor)
+            magnitude = abs(scale_factor)
+        
+            if magnitude == 0:
+                # Scaling by zero is a valid edge case, just set features to zero
+                multipliers = np.zeros((n_samples, len(feature_names)))
+            else:
+                # Use log-normal distribution for the magnitude to ensure positive multipliers
+                mean_log = np.log(magnitude) # This is now safe from math domain errors
+                cov_log = correlation_matrix * 0.1 # Small variance in log space
+                log_multipliers = rng.multivariate_normal(
+                    mean=[mean_log] * len(feature_names),
+                    cov=cov_log,
+                    size=n_samples
+                )
+                multipliers = np.exp(log_multipliers)
+        
+            # Apply correlated scaling with the correct sign
             for i, feature_name in enumerate(feature_names):
-                self.data.loc[class_indices, feature_name] *= multipliers[:, i]
-            
+                self.data.loc[class_indices, feature_name] *= (sign * multipliers[:, i])
+        
             perturbation_desc = f"correlated scaling by ~{scale_factor}x"
             perturbation_type = 'correlated_scale'
             perturbation_value = scale_factor
@@ -607,13 +613,15 @@ class GaussianDataGenerator:
         
         return self
 
+    
+
     def apply_perturbation_from_config(self, perturbation_config: Dict):
         """
         Apply perturbation from configuration dictionary.
-        Handles both individual and correlated perturbations.
+        Handles individual, correlated, and all-feature perturbations.
         """
         pert_type = perturbation_config.get('type', 'individual')
-        
+    
         if pert_type == 'correlated':
             self.perturb_correlated_features(
                 feature_names=perturbation_config['features'],
@@ -623,8 +631,14 @@ class GaussianDataGenerator:
                 scale_factor=perturbation_config.get('scale_factor'),
                 description=perturbation_config.get('description')
             )
-        else:
-            # Handle individual perturbations (existing functionality)
+        elif pert_type == 'all_features': 
+            self.perturb_all_features(
+                class_label=perturbation_config['class_label'],
+                sigma_shift=perturbation_config.get('sigma_shift'),
+                scale_factor=perturbation_config.get('scale_factor'),
+                description=perturbation_config.get('description')
+            )
+        else:  # Handle individual perturbations
             self.perturb_feature(
                 feature_name=perturbation_config['feature'],
                 class_label=perturbation_config['class_label'],

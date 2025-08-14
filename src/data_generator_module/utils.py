@@ -118,7 +118,7 @@ def create_filename_from_config(config):
                     scale_val = str(p['scale_factor']).replace('.', 'p')
                     pert_str_parts.append(f"pert_corr{feature_str}{class_str}_scale{scale_val}")
                 elif 'sigma_shift' in p:
-                    shift_val = str(p['sigma_shift']).replace('.', 'p')
+                    shift_val = str(p['sigma_shift']).replace('.', 'p').replace('-', 'p')
                     pert_str_parts.append(f"pert_corr{feature_str}{class_str}_by{shift_val}s")
             else:
                 # Handle individual perturbations (existing code)
@@ -127,7 +127,7 @@ def create_filename_from_config(config):
                     scale_val = str(p['scale_factor']).replace('.', 'p')
                     pert_str_parts.append(f"pert_f{feature_index}{class_str}_scale{scale_val}")
                 elif 'sigma_shift' in p:
-                    shift_val = str(p['sigma_shift']).replace('.', 'p')
+                    shift_val = str(p['sigma_shift']).replace('.', 'p').replace('-', 'p')
                     pert_str_parts.append(f"pert_f{feature_index}{class_str}_by{shift_val}s")
                 elif 'additive_noise' in p:
                     noise_val = str(p['additive_noise']).replace('.', 'p')

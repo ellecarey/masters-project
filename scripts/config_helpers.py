@@ -3,14 +3,14 @@ import os
 import numpy as np
 
 # --- Central Configuration ---
-OUTPUT_DIR = "configs/perturbation/disc5_sep1p8"
+OUTPUT_DIR = "configs/perturbation/disc5_sep1p8/combined-0p35"
 FEATURES = [f"feature_{i}" for i in range(5)] # update for how many features you have
 CLASS_LABEL_TO_PERTURB = 0
 CLASS_NAME_IN_FILENAME = 'n'
 
 # Only generate files if the new separability is below this percentage of the original.
 # Example: 0.95 means the new separability must be < 95% of the original (a 5% reduction).
-SEPARATION_REDUCTION_THRESHOLD = 0.4
+SEPARATION_REDUCTION_THRESHOLD = 0.35
 
 # This dictionary holds the data needed to determine shift direction. (need to update for the dataset you are generating perturbations for)
 FEATURE_MEANS = {

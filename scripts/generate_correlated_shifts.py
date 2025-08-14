@@ -1,5 +1,6 @@
 from config_helpers import *
 from itertools import combinations
+import copy
 
 def main():
     print(f"\n--- Generating Correlated Shifts (w/ Threshold: {SEPARATION_REDUCTION_THRESHOLD*100}%) ---")
