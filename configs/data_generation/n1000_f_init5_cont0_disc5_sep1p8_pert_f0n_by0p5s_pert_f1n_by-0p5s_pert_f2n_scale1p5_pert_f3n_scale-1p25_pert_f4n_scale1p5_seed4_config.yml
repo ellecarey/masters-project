@@ -1,0 +1,64 @@
+create_feature_based_signal_noise_classification:
+  feature_types:
+    feature_0: discrete
+    feature_1: discrete
+    feature_2: discrete
+    feature_3: discrete
+    feature_4: discrete
+  noise_features:
+    feature_0:
+      mean: 2.0
+      std: 2.8
+    feature_1:
+      mean: 2.5
+      std: 2.5
+    feature_2:
+      mean: 2.0
+      std: 3.0
+    feature_3:
+      mean: 3.0
+      std: 2.0
+    feature_4:
+      mean: 1.0
+      std: 1.8
+  signal_features:
+    feature_0:
+      mean: 3.0
+      std: 2.0
+    feature_1:
+      mean: 1.0
+      std: 3.5
+    feature_2:
+      mean: 3.5
+      std: 1.5
+    feature_3:
+      mean: -2.0
+      std: 2.5
+    feature_4:
+      mean: 2.5
+      std: 1.0
+dataset_settings:
+  n_initial_features: 5
+  n_samples: 1000
+global_settings:
+  random_seed: 4
+perturbation_settings:
+- class_label: 0
+  feature: feature_0
+  sigma_shift: 0.5
+- class_label: 0
+  feature: feature_1
+  sigma_shift: -0.5
+- class_label: 0
+  feature: feature_2
+  scale_factor: 1.5
+- class_label: 0
+  feature: feature_3
+  scale_factor: -1.25
+- class_label: 0
+  feature: feature_4
+  scale_factor: 1.5
+visualisation:
+  max_features_to_show: 5
+  n_bins: 25
+  save_to_dir: reports/figures/

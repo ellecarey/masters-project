@@ -1,0 +1,16 @@
+perturbation_settings:
+- feature: feature_0
+  class_label: 0
+  scale_factor: 1.25
+- feature: feature_1
+  class_label: 0
+  sigma_shift: -0.5
+- feature: feature_2
+  class_label: 0
+  scale_factor: 1.25
+- feature: feature_3
+  class_label: 0
+  scale_factor: -1.25
+- feature: feature_4
+  class_label: 0
+  sigma_shift: 0.5

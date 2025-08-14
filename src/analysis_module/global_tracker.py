@@ -3,7 +3,30 @@ import yaml
 from pathlib import Path
 import re
 from src.data_generator_module.utils import find_project_root, load_yaml_config
+import numpy as np
 
+def _calculate_separation_from_config(config: dict) -> float:
+    """
+    Calculates the overall dataset separation from a data config dict.
+    """
+    class_config = config.get("create_feature_based_signal_noise_classification", {})
+    signal_features = class_config.get("signal_features", {})
+    noise_features = class_config.get("noise_features", {})
+    
+    separations = []
+    for f_name, s_params in signal_features.items():
+        if f_name in noise_features:
+            n_params = noise_features[f_name]
+            mean_diff = abs(s_params.get('mean', 0) - n_params.get('mean', 0))
+            s_std = s_params.get('std', 1)
+            n_std = n_params.get('std', 1)
+            if (s_std**2 + n_std**2) > 0:
+                d = mean_diff / ((s_std**2 + n_std**2)**0.5)
+                separations.append(d)
+                
+    overall_separation = (sum(d**2 for d in separations))**0.5 if separations else 0.0
+    return overall_separation
+    
 def generate_global_tracking_sheet():
     """
     Scans for all completed experiment families, gathers their summary statistics
@@ -16,6 +39,7 @@ def generate_global_tracking_sheet():
     project_root = Path(find_project_root())
     spreadsheets_dir = project_root / "reports" / "spreadsheets"
     generated_configs_dir = project_root / "configs" / "training" / "generated"
+    data_gen_configs_dir = project_root / "configs" / "data_generation"
     output_path = project_root / "reports" / "global_experiment_tracking.csv"
 
     if not spreadsheets_dir.exists():
@@ -45,7 +69,22 @@ def generate_global_tracking_sheet():
             print(f"Warning: Could not find data config for family '{family_name}' at '{data_config_path}'. Skipping.")
             continue
         data_config = load_yaml_config(data_config_path)
+        
+        current_separation = _calculate_separation_from_config(data_config)
+        separation_delta = np.nan  # Default to NaN
 
+        # Check if this is a perturbed family and calculate the delta
+        if "_pert_" in family_name:
+            original_family_base = family_name.split('_pert_')[0]
+            original_config_path = data_gen_configs_dir / f"{original_family_base}_seed0_config.yml"
+            
+            if original_config_path.exists():
+                original_data_config = load_yaml_config(original_config_path)
+                original_separation = _calculate_separation_from_config(original_data_config)
+                separation_delta = current_separation - original_separation
+            else:
+                print(f"Warning: Could not find original config '{original_config_path.name}' to calculate separation delta.")
+                
         # 3. Dynamically find the corresponding optimal training config for THIS family
         # Strip away perturbation and seed info to get the base name that was tuned.
         # e.g., 'n1000...sep5p1_pert_f4n_by1p0s' -> 'n1000...sep5p1'
@@ -134,6 +173,7 @@ def generate_global_tracking_sheet():
             "continuous": continuous,
             "discrete": discrete,
             "separation": f"{overall_separation:.2f}",
+            "separation_delta": f"{separation_delta:+.2f}" if not pd.isna(separation_delta) else "N/A",
             "perturbation": perturbation_info,
             "optimal_trial_num": optimal_trial_number,
             **{f"{k}_mean": v for k, v in metrics_mean.items()},
