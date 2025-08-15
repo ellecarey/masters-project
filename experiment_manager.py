@@ -318,37 +318,36 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
         
         # 1. Perturb the multi-seed data to ensure fresh files exist
         perturb_multi_seed(data_config_base=base_data_config, perturb_config=p_config)
-
+        
         # 2. Determine the correct family name for evaluation and cleanup
-        #    This now uses the canonical `create_filename_from_config` utility
-        #    to generate the name that matches the on-disk files.
+        # Use the canonical `create_filename_from_config` utility to generate the name
         with open(base_data_config, "r") as f:
             base_conf_dict_for_naming = yaml.safe_load(f)
         with open(p_config, "r") as f:
             pert_conf_dict_for_naming = yaml.safe_load(f)
-
+        
         temp_config = base_conf_dict_for_naming.copy()
         temp_config["perturbation_settings"] = pert_conf_dict_for_naming["perturbation_settings"]
-        temp_config["global_settings"]["random_seed"] = 0 # Use a dummy seed
-
+        temp_config["global_settings"]["random_seed"] = 0  # Use a dummy seed
+        
         canonical_filename_base = create_filename_from_config(temp_config)
         pert_family_base_name_for_cleanup = canonical_filename_base.rsplit('_seed', 1)[0]
         
-        # 3. Use the original (but incorrect) tag method to find the config for evaluation
-        #    This is kept to ensure the evaluation step finds the config file it needs.
-        pert_tag_match = re.search(r'pert_.*', Path(p_config).stem)
-        pert_tag = pert_tag_match.group(0) if pert_tag_match else Path(p_config).stem
-        orig_family_base = Path(base_data_config).stem.split('_seed')[0]
-        pert_family_base_config_for_eval = project_root / "configs/data_generation" / f"{orig_family_base}_{pert_tag}_seed0_config.yml"
+        # 3. FIXED: Use the same canonical naming for evaluation config path
+        pert_family_base_config_for_eval = project_root / "configs/data_generation" / f"{pert_family_base_name_for_cleanup}_seed0_config.yml"
         
-        # 4. Run evaluation
+        # 4. Run evaluation - ALWAYS run, even if JSON files don't exist
         if pert_family_base_config_for_eval.exists():
+            print(f"Found evaluation config: {pert_family_base_config_for_eval.name}")
             evaluate_multi_seed(
                 trained_model_path=str(final_model_path),
                 data_config_base=str(pert_family_base_config_for_eval),
                 optimal_config=str(optimal_config_path)
             )
-
+        else:
+            print(f"ERROR: Evaluation config not found: {pert_family_base_config_for_eval}")
+            print(f"Expected path: {pert_family_base_config_for_eval}")
+            print("This suggests an issue with perturbation file generation or naming.")
         # 5. Clean up the perturbed data using the CORRECTLY generated family name
         clean_specific_family_data(family_base_name=pert_family_base_name_for_cleanup)
 

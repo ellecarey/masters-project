@@ -19,7 +19,7 @@ from src.utils.filenames import experiment_name, metrics_filename, model_filenam
 from src.utils.plotting_helpers import generate_subtitle_from_config
 
 TRAINING_SEED = 99
-
+        
 def train_single_config(data_config_path: str, training_config_path: str):
     """
     Train a model on a single data/training config pair.

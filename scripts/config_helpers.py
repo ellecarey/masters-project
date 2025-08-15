@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 # --- Central Configuration ---
-OUTPUT_DIR = "configs/perturbation/disc10_sep1p8/combined-shift-0p2"
+OUTPUT_DIR = "configs/perturbation/disc10_sep1p8/combined"
 FEATURES = [f"feature_{i}" for i in range(10)] # update for how many features you have
 CLASS_LABEL_TO_PERTURB = 0
 CLASS_NAME_IN_FILENAME = 'n'

@@ -22,6 +22,7 @@ def parse_optimal_config_name(opt_config_path):
 
     return dataset_base, model_name, seed, perturbation_tag
 
+
 def experiment_name(
     dataset_base_name: str,
     model_name: str,
