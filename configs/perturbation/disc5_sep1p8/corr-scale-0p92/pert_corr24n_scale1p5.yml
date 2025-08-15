@@ -1,0 +1,13 @@
+perturbation_settings:
+- type: correlated
+  class_label: 0
+  features:
+  - feature_2
+  - feature_4
+  correlation_matrix:
+  - - 1.0
+    - 0.8
+  - - 0.8
+    - 1.0
+  scale_factor: 1.5
+  description: Sensor drift correlation

@@ -338,7 +338,7 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
         #    This is kept to ensure the evaluation step finds the config file it needs.
         pert_tag_match = re.search(r'pert_.*', Path(p_config).stem)
         pert_tag = pert_tag_match.group(0) if pert_tag_match else Path(p_config).stem
-        orig_family_base = Path(base_data_config).stem.split('_seed')
+        orig_family_base = Path(base_data_config).stem.split('_seed')[0]
         pert_family_base_config_for_eval = project_root / "configs/data_generation" / f"{orig_family_base}_{pert_tag}_seed0_config.yml"
         
         # 4. Run evaluation

@@ -5,31 +5,40 @@ import copy
 def main():
     print(f"\n--- Generating Correlated Scales (w/ Threshold: {SEPARATION_REDUCTION_THRESHOLD*100}%) ---")
     print(f"Original Dataset Separability (d_D): {ORIGINAL_SEPARATION:.4f}")
+
     generated_count = 0
     rejected_count = 0
 
     for size in range(2, len(FEATURES) + 1):
         matrix = CORRELATION_MATRICES.get(size)
-        if not matrix: continue
+        if not matrix:
+            continue
 
         for indices in combinations(range(len(FEATURES)), size):
             names = [FEATURES[i] for i in indices]
-
             for scale in SCALE_FACTORS:
                 perturbed_means = copy.deepcopy(ORIGINAL_NOISE_MEANS)
                 perturbed_vars = copy.deepcopy(ORIGINAL_NOISE_VARS)
-                
                 for feature in names:
                     perturbed_means[feature] *= scale
                     perturbed_vars[feature] *= (scale**2)
-                
                 new_separation = calculate_separability(perturbed_means, perturbed_vars)
-
                 # --- Check against the threshold ---
                 if new_separation < (ORIGINAL_SEPARATION * SEPARATION_REDUCTION_THRESHOLD):
-                    f_str = "".join(map(str, indices))
-                    config = {'perturbation_settings': [{'type': 'correlated', 'class_label': CLASS_LABEL_TO_PERTURB, 'features': names, 'correlation_matrix': matrix, 'scale_factor': scale}]}
-                    filename = f"pert_corr_f{f_str}{CLASS_NAME_IN_FILENAME}_scale{format_val(scale)}.yml"
+                    # E.g.: pert_corr04s_scale1p5.yml for features 0, 4, scale 1.5
+                    f_str = "".join(str(i) for i in indices)
+                    filename = f"pert_corr{f_str}{CLASS_NAME_IN_FILENAME}_scale{format_val(scale)}.yml"
+                    config = {
+                        'perturbation_settings': [{
+                            'type': 'correlated',
+                            'class_label': CLASS_LABEL_TO_PERTURB,
+                            'features': names,
+                            'correlation_matrix': matrix,
+                            'scale_factor': scale,
+                            # Add description optionally:
+                            'description': "Sensor drift correlation" if len(names)==2 else ""
+                        }]
+                    }
                     write_yaml_file(config, filename)
                     generated_count += 1
                 else:
@@ -41,3 +50,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

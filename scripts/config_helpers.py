@@ -4,7 +4,7 @@ import numpy as np
 
 # --- Central Configuration ---
 OUTPUT_DIR = "configs/perturbation/disc10_sep1p8/combined-shift-0p2"
-FEATURES = [f"feature_{i}" for i in range(5)] # update for how many features you have
+FEATURES = [f"feature_{i}" for i in range(10)] # update for how many features you have
 CLASS_LABEL_TO_PERTURB = 0
 CLASS_NAME_IN_FILENAME = 'n'
 
@@ -14,47 +14,47 @@ SEPARATION_REDUCTION_THRESHOLD = 0.2
 
 
 # This dictionary holds the data needed to determine shift direction. (need to update for the dataset you are generating perturbations for)
-FEATURE_MEANS = {
-    'feature_0': {'noise': 2.0, 'signal': 3.0},
-    'feature_1': {'noise': 2.5, 'signal': 1.0},
-    'feature_2': {'noise': 2.0, 'signal': 3.5},
-    'feature_3': {'noise': 3.0, 'signal': -2.0},
-    'feature_4': {'noise': 1.0, 'signal': 2.5},
-}
-
-FEATURE_STD_DEVS = {
-    'feature_0': {'noise': 2.8, 'signal': 2.0},
-    'feature_1': {'noise': 2.5, 'signal': 3.5},
-    'feature_2': {'noise': 3.0, 'signal': 1.5},
-    'feature_3': {'noise': 2.0, 'signal': 2.5},
-    'feature_4': {'noise': 1.8, 'signal': 1.0},
-}
-
 # FEATURE_MEANS = {
-#     'feature_0': {'noise': 1.0, 'signal': 2.0},
-#     'feature_1': {'noise': 0.5, 'signal': -1.5},
-#     'feature_2': {'noise': 3.0, 'signal': 4.0},
-#     'feature_3': {'noise': -1.5, 'signal': 1.5},
-#     'feature_4': {'noise': 1.2, 'signal': 0.0},
-#     'feature_5': {'noise': 1.2, 'signal': 3.0},
-#     'feature_6': {'noise': 0.0, 'signal': 2.5},
-#     'feature_7': {'noise': -3.0, 'signal': -2.0},
-#     'feature_8': {'noise': 1.0, 'signal': 5.25},
-#     'feature_9': {'noise': 2.0, 'signal': 1.0},
+#     'feature_0': {'noise': 2.0, 'signal': 3.0},
+#     'feature_1': {'noise': 2.5, 'signal': 1.0},
+#     'feature_2': {'noise': 2.0, 'signal': 3.5},
+#     'feature_3': {'noise': 3.0, 'signal': -2.0},
+#     'feature_4': {'noise': 1.0, 'signal': 2.5},
 # }
 
 # FEATURE_STD_DEVS = {
-#     'feature_0': {'noise': 1.8, 'signal': 2.2},
-#     'feature_1': {'noise': 2.2, 'signal': 2.8},
-#     'feature_2': {'noise': 3.0, 'signal': 2.0},
-#     'feature_3': {'noise': 2.8, 'signal': 3.2},
-#     'feature_4': {'noise': 2.4, 'signal': 1.5},
-#     'feature_5': {'noise': 2.2, 'signal': 2.9},
-#     'feature_6': {'noise': 2.5, 'signal': 3.0},
-#     'feature_7': {'noise': 2.1, 'signal': 1.9},
-#     'feature_8': {'noise': 2.9, 'signal': 2.5},
-#     'feature_9': {'noise': 3.1, 'signal': 3.5},
+#     'feature_0': {'noise': 2.8, 'signal': 2.0},
+#     'feature_1': {'noise': 2.5, 'signal': 3.5},
+#     'feature_2': {'noise': 3.0, 'signal': 1.5},
+#     'feature_3': {'noise': 2.0, 'signal': 2.5},
+#     'feature_4': {'noise': 1.8, 'signal': 1.0},
 # }
+
+FEATURE_MEANS = {
+    'feature_0': {'noise': 1.0, 'signal': 2.0},
+    'feature_1': {'noise': 0.5, 'signal': -1.5},
+    'feature_2': {'noise': 3.0, 'signal': 4.0},
+    'feature_3': {'noise': -1.5, 'signal': 1.5},
+    'feature_4': {'noise': 1.2, 'signal': 0.0},
+    'feature_5': {'noise': 1.2, 'signal': 3.0},
+    'feature_6': {'noise': 0.0, 'signal': 2.5},
+    'feature_7': {'noise': -3.0, 'signal': -2.0},
+    'feature_8': {'noise': 1.0, 'signal': 5.25},
+    'feature_9': {'noise': 2.0, 'signal': 1.0},
+}
+
+FEATURE_STD_DEVS = {
+    'feature_0': {'noise': 1.8, 'signal': 2.2},
+    'feature_1': {'noise': 2.2, 'signal': 2.8},
+    'feature_2': {'noise': 3.0, 'signal': 2.0},
+    'feature_3': {'noise': 2.8, 'signal': 3.2},
+    'feature_4': {'noise': 2.4, 'signal': 1.5},
+    'feature_5': {'noise': 2.2, 'signal': 2.9},
+    'feature_6': {'noise': 2.5, 'signal': 3.0},
+    'feature_7': {'noise': 2.1, 'signal': 1.9},
+    'feature_8': {'noise': 2.9, 'signal': 2.5},
+    'feature_9': {'noise': 3.1, 'signal': 3.5},
+}
 
 # --- Perturbation strengths ---
 SCALE_FACTORS = [1.25, 1.5, -1.25, -1.5]
