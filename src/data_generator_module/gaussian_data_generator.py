@@ -613,15 +613,13 @@ class GaussianDataGenerator:
         
         return self
 
-    
-
     def apply_perturbation_from_config(self, perturbation_config: Dict):
         """
         Apply perturbation from configuration dictionary.
-        Handles individual, correlated, and all-feature perturbations.
+        Handles both individual and correlated perturbations.
         """
         pert_type = perturbation_config.get('type', 'individual')
-    
+        
         if pert_type == 'correlated':
             self.perturb_correlated_features(
                 feature_names=perturbation_config['features'],
@@ -631,14 +629,8 @@ class GaussianDataGenerator:
                 scale_factor=perturbation_config.get('scale_factor'),
                 description=perturbation_config.get('description')
             )
-        elif pert_type == 'all_features': 
-            self.perturb_all_features(
-                class_label=perturbation_config['class_label'],
-                sigma_shift=perturbation_config.get('sigma_shift'),
-                scale_factor=perturbation_config.get('scale_factor'),
-                description=perturbation_config.get('description')
-            )
-        else:  # Handle individual perturbations
+        else:
+            # Handle individual perturbations (existing functionality)
             self.perturb_feature(
                 feature_name=perturbation_config['feature'],
                 class_label=perturbation_config['class_label'],

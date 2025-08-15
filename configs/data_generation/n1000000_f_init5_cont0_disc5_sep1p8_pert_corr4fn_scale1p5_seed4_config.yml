@@ -64,8 +64,8 @@ perturbation_settings:
     - 1.0
   features:
   - feature_0
-  - feature_1
   - feature_2
+  - feature_3
   - feature_4
   scale_factor: 1.5
   type: correlated

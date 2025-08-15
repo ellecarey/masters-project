@@ -24,7 +24,7 @@ from src.analysis_module.analysis_cli import (
 )
 from src.analysis_module.comparison import compare_families
 from src.data_generator_module.utils import find_project_root, create_filename_from_config
-
+from src.analysis_module.results_visualiser import main as visualise_main
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -315,28 +315,44 @@ def run_perturbation_study(base_data_config: str, tuning_job: str, perturb_confi
     # Loop through perturbations
     for p_config in final_perturb_configs:
         print(f"\n--- Processing perturbation: {p_config} ---")
-        # ALWAYS perturb the data to ensure it's fresh
+        
+        # 1. Perturb the multi-seed data to ensure fresh files exist
         perturb_multi_seed(data_config_base=base_data_config, perturb_config=p_config)
 
-        # THEN evaluate (which will use its own internal checks)
+        # 2. Determine the correct family name for evaluation and cleanup
+        #    This now uses the canonical `create_filename_from_config` utility
+        #    to generate the name that matches the on-disk files.
+        with open(base_data_config, "r") as f:
+            base_conf_dict_for_naming = yaml.safe_load(f)
+        with open(p_config, "r") as f:
+            pert_conf_dict_for_naming = yaml.safe_load(f)
+
+        temp_config = base_conf_dict_for_naming.copy()
+        temp_config["perturbation_settings"] = pert_conf_dict_for_naming["perturbation_settings"]
+        temp_config["global_settings"]["random_seed"] = 0 # Use a dummy seed
+
+        canonical_filename_base = create_filename_from_config(temp_config)
+        pert_family_base_name_for_cleanup = canonical_filename_base.rsplit('_seed', 1)[0]
+        
+        # 3. Use the original (but incorrect) tag method to find the config for evaluation
+        #    This is kept to ensure the evaluation step finds the config file it needs.
         pert_tag_match = re.search(r'pert_.*', Path(p_config).stem)
         pert_tag = pert_tag_match.group(0) if pert_tag_match else Path(p_config).stem
-        orig_family_base = Path(base_data_config).stem.split('_seed')[0]
-        pert_family_base_config = project_root / "configs/data_generation" / f"{orig_family_base}_{pert_tag}_seed0_config.yml"
-        pert_family_base_name = pert_family_base_config.stem.rsplit('_seed', 1)[0]
-
-
-        if pert_family_base_config.exists():
+        orig_family_base = Path(base_data_config).stem.split('_seed')
+        pert_family_base_config_for_eval = project_root / "configs/data_generation" / f"{orig_family_base}_{pert_tag}_seed0_config.yml"
+        
+        # 4. Run evaluation
+        if pert_family_base_config_for_eval.exists():
             evaluate_multi_seed(
                 trained_model_path=str(final_model_path),
-                data_config_base=str(pert_family_base_config),
+                data_config_base=str(pert_family_base_config_for_eval),
                 optimal_config=str(optimal_config_path)
             )
 
-        # Clean up the perturbed data immediately after evaluation
-        clean_specific_family_data(family_base_name=pert_family_base_name)
+        # 5. Clean up the perturbed data using the CORRECTLY generated family name
+        clean_specific_family_data(family_base_name=pert_family_base_name_for_cleanup)
 
-    print("✅ All perturbation families evaluated.")
+    print("✅ All perturbation families evaluated and cleaned.")
 
     # --- Step 5: Aggregation (ALWAYS runs) ---
     print("\n[STEP 5/5] Aggregating all results...")
@@ -437,6 +453,12 @@ def main():
     study.add_argument("--perturb-configs", required=False, nargs='+', help="A space-separated list of specific perturbation config files to test against.")
     study.add_argument("--all-perturbations", action="store_true", help="Automatically find and run all perturbations in 'configs/perturbation/'.")
 
+    vis = subparsers.add_parser("visualise-results", help="Generate final plots from the global tracking sheet.")
+    vis.add_argument(
+    "--sheet",
+    type=str,
+    default="reports/global_experiment_tracking.csv",
+    help="Path to the global experiment tracking CSV file.")
 
     args = parser.parse_args()
 
@@ -508,6 +530,11 @@ def main():
             perturb_configs=args.perturb_configs,
             use_all_perturbations=args.all_perturbations
         )
+    elif args.command == "visualise-results":
+        project_root = Path(find_project_root())
+        sheet_path = project_root / args.sheet
+        visualise_main(sheet_path)
+
 
 if __name__ == "__main__":
     main()

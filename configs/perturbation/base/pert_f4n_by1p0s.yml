@@ -1,4 +1,4 @@
 perturbation_settings:
-  - feature: "feature_0"
-    class_label: 0  
-    sigma_shift: 0.25 
+  - feature: "feature_4"
+    class_label: 0  # 0 for noise, 1 for signal
+    sigma_shift: 1.0 # Shift by +1.0 standard deviation
