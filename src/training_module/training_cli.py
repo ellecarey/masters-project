@@ -172,14 +172,17 @@ def train_single_config(data_config_path: str, training_config_path: str):
     print("\n--- Final Model Evaluation on Test Set ---")
     trained_model.eval()
     test_loss, all_preds, all_labels = 0.0, [], []
+    all_probs = []
     with torch.no_grad():
         for features, labels in test_loader:
             features, labels = features.to(device), labels.to(device)
             outputs = trained_model(features)
             loss = criterion(outputs, labels)
             test_loss += loss.item()
-            all_preds.extend(torch.round(torch.sigmoid(outputs)).cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+            probabilities = torch.sigmoid(outputs)
+            all_probs.extend(probabilities.cpu().numpy().ravel())
+            all_preds.extend(torch.round(probabilities).cpu().numpy().ravel())
+            all_labels.extend(labels.cpu().numpy().ravel())
 
     avg_test_loss = test_loss / len(test_loader)
 
@@ -187,7 +190,7 @@ def train_single_config(data_config_path: str, training_config_path: str):
     f1 = f1_score(all_labels, all_preds)
     precision = precision_score(all_labels, all_preds, zero_division=0)
     recall = recall_score(all_labels, all_preds, zero_division=0)
-    final_auc = roc_auc_score(all_labels, all_preds)
+    final_auc = roc_auc_score(all_labels, all_probs)
     print(
         f"Final Test Loss (BCE): {avg_test_loss:.4f}, Accuracy: {accuracy:.4f}, F1-Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, AUC: {final_auc:.4f}"
     )
@@ -312,14 +315,17 @@ def evaluate_single_config(
     model.eval()
     criterion = nn.BCEWithLogitsLoss()
     eval_loss, all_preds, all_labels = 0.0, [], []
+    all_probs = []
     with torch.no_grad():
         for features, labels in evaluation_loader:
             features, labels = features.to(device), labels.to(device)
             outputs = model(features)
             loss = criterion(outputs, labels)
             eval_loss += loss.item()
-            all_preds.extend(torch.round(torch.sigmoid(outputs)).cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+            probabilities = torch.sigmoid(outputs)
+            all_probs.extend(probabilities.cpu().numpy().ravel())
+            all_preds.extend(torch.round(probabilities).cpu().numpy().ravel())
+            all_labels.extend(labels.cpu().numpy().ravel())
 
     avg_eval_loss = eval_loss / len(evaluation_loader)
     from sklearn.metrics import (
@@ -334,7 +340,7 @@ def evaluate_single_config(
     f1 = f1_score(all_labels, all_preds)
     precision = precision_score(all_labels, all_preds, zero_division=0)
     recall = recall_score(all_labels, all_preds, zero_division=0)
-    final_auc = roc_auc_score(all_labels, all_preds)
+    final_auc = roc_auc_score(all_labels, all_probs)
 
     # --- Save Metrics ---
     final_metrics = {
