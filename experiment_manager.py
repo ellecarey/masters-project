@@ -4,6 +4,7 @@ import torch.multiprocessing as mp
 import yaml
 from pathlib import Path
 import re
+from src.utils.dataset_lifecycle import cleanup_evaluated_datasets, evaluation_config_paths
 from src.data_generator_module.generator_cli import (
     generate_from_config,
     generate_multi_seed,
@@ -33,82 +34,26 @@ TRAINING_SEED = 99
 
 
 def clean_data_directory():
-    """Deletes all .csv files from the data directory."""
-    try:
-        project_root = Path(find_project_root())
-        data_dir = project_root / "data"
-
-        if not data_dir.exists():
-            print(
-                f"Info: Data directory '{data_dir}' does not exist. Nothing to clean."
-            )
-            return
-
-        print(f"\nScanning for .csv files in '{data_dir}'...")
-        csv_files = list(data_dir.glob("*.csv"))
-
-        if not csv_files:
-            print("Data directory is already clean (no .csv files found).")
-            return
-
-        print(f"Found {len(csv_files)} .csv files to delete.")
-        for f in csv_files:
-            try:
-                f.unlink()
-                print(f" - Deleted {f.name}")
-            except Exception as e:
-                print(f" - Error deleting {f.name}: {e}")
-
-        print("✅ Data directory cleaned successfully.")
-
-    except Exception as e:
-        print(f"An error occurred during cleanup: {e}")
+    """Legacy broad cleanup is deliberately disabled."""
+    raise RuntimeError(
+        "Blanket CSV cleanup is disabled. Use --cleanup-generated for "
+        "run-owned datasets with fresh successful evaluation."
+    )
 
 
 def clean_specific_family_data(family_base_name: str):
-    """
-    Deletes all CSV dataset files associated with a specific experiment family.
-    """
-    try:
-        project_root = Path(find_project_root())
-        data_dir = project_root / "data"
-        if not data_dir.exists():
-            return
-
-        # Create a glob pattern to find all dataset files for the given family
-        file_pattern = f"{family_base_name}_seed*_dataset.csv"
-        csv_files_to_delete = list(data_dir.glob(file_pattern))
-
-        if not csv_files_to_delete:
-            # This is normal if the files were already cleaned or never created
-            return
-
-        print(
-            f"\n🧹 Cleaning up {len(csv_files_to_delete)} CSV files for family: {family_base_name}"
-        )
-        for f in csv_files_to_delete:
-            try:
-                f.unlink()
-            except OSError as e:
-                print(f" - Error deleting {f.name}: {e}")
-        print("✅ Family cleanup complete.")
-
-    except Exception as e:
-        print(f"An error occurred during specific family cleanup: {e}")
+    """A family name alone is not proof of ownership or successful evaluation."""
+    raise RuntimeError("Glob-based family cleanup is disabled; use run-owned receipts.")
 
 
 def run_full_pipeline(
-    base_data_config: str, tuning_job: str, perturb_config: str = None
+    base_data_config: str, tuning_job: str, perturb_config: str = None,
+    *, cleanup_generated: bool = False,
 ):
     """
     Orchestrates the entire ML pipeline from data generation to final comparison
     by calling functions directly for improved efficiency and robustness.
     """
-
-    print("=" * 80)
-    print("🧹 PRE-FLIGHT CHECK: Cleaning data directory. 🧹")
-    print("=" * 80)
-    clean_data_directory()
 
     project_root = Path(find_project_root())
     print("=" * 80)
@@ -117,14 +62,16 @@ def run_full_pipeline(
 
     # --- Step 1: Generate multi-seed datasets ---
     print("\n[STEP 1/6] Generating multi-seed datasets...")
-    generate_multi_seed(base_config_path=base_data_config)
+    generated = generate_multi_seed(base_config_path=base_data_config)
+    perturbed = []
     print("✅ Datasets generated successfully.")
 
     # --- Step 2: Apply perturbations (if specified) ---
     if perturb_config:
         print("\n[STEP 2/6] Applying perturbations...")
-        perturb_multi_seed(
-            data_config_base=base_data_config, perturb_config=perturb_config
+        perturbed = perturb_multi_seed(
+            data_config_base=base_data_config, perturb_config=perturb_config,
+            config_paths=evaluation_config_paths(generated),
         )
         print("✅ Perturbations applied successfully.")
 
@@ -196,32 +143,23 @@ def run_full_pipeline(
 
     # Evaluate the original family first
     print(f"--- Evaluating on original family from: {Path(base_data_config).name} ---")
-    evaluate_multi_seed(
+    evaluated = evaluate_multi_seed(
         trained_model_path=str(final_model_path),
         data_config_base=str(base_data_config),
         optimal_config=str(optimal_config_path),
+        config_paths=evaluation_config_paths(generated),
     )
 
     # Evaluate the perturbed family if it exists
-    if perturb_config:
-        pert_tag_match = re.search(r"pert_.*", Path(perturb_config).stem)
-        if pert_tag_match:
-            pert_tag = pert_tag_match.group(0)
-            orig_family_base = Path(base_data_config).stem.split("_seed")[0]
-            pert_family_base_config = (
-                project_root
-                / "configs/data_generation"
-                / f"{orig_family_base}_{pert_tag}_seed0_config.yml"
-            )
-            if pert_family_base_config.exists():
-                print(
-                    f"--- Evaluating on perturbed family from: {pert_family_base_config.name} ---"
-                )
-                evaluate_multi_seed(
-                    trained_model_path=str(final_model_path),
-                    data_config_base=str(pert_family_base_config),
-                    optimal_config=str(optimal_config_path),
-                )
+    if perturbed:
+        evaluated.update(evaluate_multi_seed(
+            trained_model_path=str(final_model_path),
+            data_config_base=str(perturbed[0].config_path),
+            optimal_config=str(optimal_config_path),
+            config_paths=evaluation_config_paths(perturbed),
+        ))
+    elif perturb_config:
+        raise RuntimeError("Perturbation generation produced no datasets; stopping.")
 
     print("✅ Multi-seed evaluation complete.")
 
@@ -229,6 +167,8 @@ def run_full_pipeline(
     print("\n[STEP 6/6] Aggregating all results and generating final comparison...")
     aggregate_all_families(optimal_config=str(optimal_config_path))
     print("✅ Aggregation and comparison complete.")
+    if cleanup_generated:
+        cleanup_evaluated_datasets([*generated, *perturbed], evaluated)
 
     print("\n🎉 PIPELINE FINISHED SUCCESSFULLY! 🎉")
 
@@ -238,11 +178,14 @@ def run_pipeline_batch(
     tuning_job: str,
     perturb_config: str = None,
     clean_first: bool = False,
+    *,
+    cleanup_generated: bool = False,
 ):
     """
     Orchestrates multiple runs of the full pipeline for a list of base datasets and one perturbation.
     """
-    project_root = Path(find_project_root())
+    if clean_first:
+        raise ValueError("clean_first is disabled; use cleanup_generated instead.")
 
     print("=" * 80)
     print(f"🚀 STARTING BATCH PIPELINE RUN FOR {len(base_data_configs)} DATASETS 🚀")
@@ -258,6 +201,7 @@ def run_pipeline_batch(
                 base_data_config=base_config,
                 tuning_job=tuning_job,
                 perturb_config=perturb_config,
+                cleanup_generated=cleanup_generated,
             )
             print(f"--- ✅ Finished Pipeline {i + 1}/{len(base_data_configs)} ---")
         except Exception as e:
@@ -265,7 +209,8 @@ def run_pipeline_batch(
                 f"--- ❌ FAILED Pipeline {i + 1}/{len(base_data_configs)} for '{base_config}' ---"
             )
             print(f"Error: {e}")
-            print("--- Continuing to the next pipeline in the batch. ---")
+            print("--- Stopping the batch; failed-run datasets are retained. ---")
+            raise
 
     print("\n🎉 BATCH PIPELINE FINISHED SUCCESSFULLY! 🎉")
 
@@ -275,6 +220,8 @@ def run_perturbation_study(
     tuning_job: str,
     perturb_configs: list = None,
     use_all_perturbations: bool = False,
+    *,
+    cleanup_generated: bool = False,
 ):
     """
     Orchestrates a study by tuning a model on original data once, then
@@ -322,8 +269,7 @@ def run_perturbation_study(
     print("🚀 STARTING PERTURBATION STUDY 🚀")
     print("=" * 80)
     print("\n[STEP 1/5] Generating fresh base dataset (this step always runs)...")
-    clean_data_directory()  # Clean all .csv files first
-    generate_multi_seed(base_config_path=base_data_config)
+    generated = generate_multi_seed(base_config_path=base_data_config)
     print("✅ Original datasets generated successfully.")
 
     # --- Determine paths and check if tuning can be skipped ---
@@ -378,10 +324,11 @@ def run_perturbation_study(
     print("\n[STEP 4/5] Evaluating model on all dataset families...")
     # Evaluate baseline (has internal checks to skip if metrics exist)
     print("\n--- Evaluating on original (unperturbed) dataset family ---")
-    evaluate_multi_seed(
+    baseline_evaluated = evaluate_multi_seed(
         trained_model_path=str(final_model_path),
         data_config_base=str(base_data_config),
         optimal_config=str(optimal_config_path),
+        config_paths=evaluation_config_paths(generated),
     )
 
     # Loop through perturbations
@@ -389,13 +336,16 @@ def run_perturbation_study(
         print(f"\n--- Processing perturbation: {p_config} ---")
 
         # 1. Perturb the multi-seed data to ensure fresh files exist
-        perturb_multi_seed(data_config_base=base_data_config, perturb_config=p_config)
+        perturbed = perturb_multi_seed(
+            data_config_base=base_data_config, perturb_config=p_config,
+            config_paths=evaluation_config_paths(generated),
+        )
 
         # 2. Determine the correct family name for evaluation and cleanup
         # Use the canonical `create_filename_from_config` utility to generate the name
         with open(base_data_config, "r") as f:
             base_conf_dict_for_naming = yaml.safe_load(f)
-        with open(p_config, "r") as f:
+        with open(project_root / p_config, "r") as f:
             pert_conf_dict_for_naming = yaml.safe_load(f)
 
         temp_config = base_conf_dict_for_naming.copy()
@@ -419,10 +369,11 @@ def run_perturbation_study(
         # 4. Run evaluation - ALWAYS run, even if JSON files don't exist
         if pert_family_base_config_for_eval.exists():
             print(f"Found evaluation config: {pert_family_base_config_for_eval.name}")
-            evaluate_multi_seed(
+            evaluated = evaluate_multi_seed(
                 trained_model_path=str(final_model_path),
                 data_config_base=str(pert_family_base_config_for_eval),
                 optimal_config=str(optimal_config_path),
+                config_paths=evaluation_config_paths(perturbed),
             )
         else:
             raise FileNotFoundError(
@@ -431,15 +382,18 @@ def run_perturbation_study(
                 "Stopping the study without cleaning this perturbation family "
                 "or aggregating incomplete results."
             )
-        # 5. Clean up the perturbed data using the CORRECTLY generated family name
-        clean_specific_family_data(family_base_name=pert_family_base_name_for_cleanup)
+        # Reclaim space between perturbations only with fresh success receipts.
+        if cleanup_generated:
+            cleanup_evaluated_datasets(perturbed, evaluated)
 
-    print("✅ All perturbation families evaluated and cleaned.")
+    print("All perturbation families evaluated; cleanup followed the requested policy.")
 
     # --- Step 5: Aggregation (ALWAYS runs) ---
     print("\n[STEP 5/5] Aggregating all results...")
     aggregate_all_families(optimal_config=str(optimal_config_path))
     print("✅ Aggregation and comparison complete.")
+    if cleanup_generated:
+        cleanup_evaluated_datasets(generated, baseline_evaluated)
 
     print("\n🎉 PERTURBATION STUDY FINISHED SUCCESSFULLY! 🎉")
 
@@ -702,6 +656,15 @@ def main():
         action="store_true",
         help="Automatically find and run all perturbations in 'configs/perturbation/'.",
     )
+    for workflow_parser in (pipe, batch_pipe, study):
+        workflow_parser.add_argument(
+            "--cleanup-generated",
+            action="store_true",
+            help=(
+                "Delete only CSVs created by this run after fresh successful "
+                "evaluation. Keep training CSVs, cached-evaluation CSVs and failed runs."
+            ),
+        )
 
     vis = subparsers.add_parser(
         "visualise-results", help="Generate final plots from the global tracking sheet."
@@ -756,12 +719,16 @@ def main():
             non_interactive=args.non_interactive,
         )
     elif args.command == "run-full-pipeline":
-        run_full_pipeline(args.base_data_config, args.tuning_job, args.perturb_config)
+        run_full_pipeline(
+            args.base_data_config, args.tuning_job, args.perturb_config,
+            cleanup_generated=args.cleanup_generated,
+        )
     elif args.command == "run-pipeline-batch":
         run_pipeline_batch(
             base_data_configs=args.base_data_configs,
             tuning_job=args.tuning_job,
             perturb_config=args.perturb_config,
+            cleanup_generated=args.cleanup_generated,
         )
     elif args.command == "run-perturbation-study":
         run_perturbation_study(
@@ -769,6 +736,7 @@ def main():
             tuning_job=args.tuning_job,
             perturb_configs=args.perturb_configs,
             use_all_perturbations=args.all_perturbations,
+            cleanup_generated=args.cleanup_generated,
         )
     elif args.command == "visualise-results":
         project_root = Path(find_project_root())

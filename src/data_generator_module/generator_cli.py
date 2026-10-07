@@ -4,6 +4,12 @@ import pandas as pd
 from src.data_generator_module import utils
 from src.data_generator_module.gaussian_data_generator import GaussianDataGenerator
 import yaml
+from copy import deepcopy
+from src.utils.dataset_lifecycle import (
+    dataset_path,
+    save_new_dataset,
+    write_config_without_overwrite,
+)
 from src.data_generator_module.utils import (
     find_project_root,
     create_filename_from_config,
@@ -26,18 +32,12 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
     try:
         config = utils.load_yaml_config(config_path)
         print(f"Successfully loaded configuration from {config_path}")
-    except FileNotFoundError:
-        print(f"Error: {config_path} not found. Please ensure it exists.")
-        return
-    except Exception as e:
-        print(f"Error loading or parsing {config_path}: {e}")
-        return
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Generation config not found: {config_path}") from e
 
     # Validate configuration structure
     if "create_feature_based_signal_noise_classification" not in config:
-        print("Error: Configuration must include 'create_feature_based_signal_noise_classification' section")
-        print("This pipeline supports feature-based signal vs noise classification")
-        return
+        raise ValueError("Configuration must include 'create_feature_based_signal_noise_classification'")
 
     # Set the global random seed for reproducibility
     global_seed = config["global_settings"]["random_seed"]
@@ -46,6 +46,9 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
     # Generate unique experiment name from configuration
     experiment_name = utils.create_filename_from_config(config)
     print(f"Generated experiment name: {experiment_name}")
+    dataset_filepath = dataset_path(Path(find_project_root()), config, experiment_name)
+    if dataset_filepath.exists() or dataset_filepath.is_symlink():
+        raise FileExistsError(f"Refusing to overwrite dataset: {dataset_filepath}")
 
     # Initialise the data generator
     dataset_settings = config["dataset_settings"]
@@ -73,10 +76,8 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
             generator.apply_perturbation_from_config(p_config)
 
     # Save the generated dataset
-    output_settings = config.get("output_settings", {"data_dir": "data/"})
-    output_data_dir = output_settings.get("data_dir", "data/")
-    dataset_filepath = os.path.join(output_data_dir, f"{experiment_name}_dataset.csv")
-    generator.save_data(file_path=dataset_filepath)
+    generated = save_new_dataset(generator.data, dataset_filepath, Path(config_path))
+    print(f"Data successfully saved to {dataset_filepath}")
 
     # Generate visualisations if requested
     if "visualisation" in config:
@@ -132,6 +133,7 @@ def generate_from_config(config_path: str, keep_original_name: bool = False):
             print(f" Noise samples (target=0): {noise_count}")
     print("\nFeature-based signal vs noise data generation completed successfully!")
     print("Neural networks will learn to classify samples based on feature combinations only.\n")
+    return generated
 
 def generate_multi_seed(base_config_path: str, num_seeds: int = 10, start_seed: int = 0, generate_training_seed: bool = True):
     """
@@ -144,6 +146,7 @@ def generate_multi_seed(base_config_path: str, num_seeds: int = 10, start_seed: 
     
     project_root = Path(find_project_root())
     config_dir = project_root / "configs" / "data_generation"
+    generated = []
 
     with open(base_config_path, "r") as f:
         base_config = yaml.safe_load(f)
@@ -152,22 +155,20 @@ def generate_multi_seed(base_config_path: str, num_seeds: int = 10, start_seed: 
     print(f"--- Generating {num_seeds} evaluation datasets (seeds {start_seed} to {start_seed + num_seeds - 1}) ---")
     for i in range(num_seeds):
         current_seed = start_seed + i
-        new_config = base_config.copy()
+        new_config = deepcopy(base_config)
         new_config["global_settings"]["random_seed"] = current_seed
         
         new_config_base_name = create_filename_from_config(new_config)
         new_config_filename = f"{new_config_base_name}_config.yml"
         new_config_path = config_dir / new_config_filename
 
-        with open(new_config_path, 'w') as f:
-            yaml.dump(new_config, f, default_flow_style=False)
-        
-        generate_from_config(str(new_config_path), keep_original_name=True)
+        write_config_without_overwrite(new_config_path, new_config)
+        generated.append(generate_from_config(str(new_config_path), keep_original_name=True))
 
     # Generate the dedicated training seed if requested
     if generate_training_seed:
         print(f"\n--- Generating dedicated training dataset (seed {TRAINING_SEED}) ---")
-        training_config = base_config.copy()
+        training_config = deepcopy(base_config)
         training_config["global_settings"]["random_seed"] = TRAINING_SEED
     
         temp_base_name = create_filename_from_config(training_config)
@@ -176,12 +177,11 @@ def generate_multi_seed(base_config_path: str, num_seeds: int = 10, start_seed: 
         training_config_filename = f"{training_base_name}_config.yml" 
         training_config_path = config_dir / training_config_filename
 
-        with open(training_config_path, 'w') as f:
-            yaml.dump(training_config, f, default_flow_style=False)
-            
-        generate_from_config(str(training_config_path), keep_original_name=True)
+        write_config_without_overwrite(training_config_path, training_config)
+        generated.append(generate_from_config(str(training_config_path), keep_original_name=True))
+    return generated
         
-def perturb_multi_seed(data_config_base: str, perturb_config: str):
+def perturb_multi_seed(data_config_base: str, perturb_config: str, *, config_paths=None):
     """
     Apply perturbations to a family of datasets (multi-seed).
     """
@@ -198,23 +198,29 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
     all_data_configs = sorted(list(data_config_dir.glob(f"{family_name}_seed*_config.yml")))
     
     # Exclude the training seed from perturbation
-    evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
+    evaluation_configs = (
+        [Path(p) for p in config_paths]
+        if config_paths is not None
+        else [p for p in all_data_configs if "_training" not in p.name]
+    )
     print(f"Found {len(evaluation_configs)} evaluation datasets to perturb ('_training' dataset will be skipped).")
+    if not evaluation_configs:
+        raise FileNotFoundError(f"No evaluation configs found for family: {family_name}")
+    generated = []
     
-    for data_config_path in all_data_configs:
+    for data_config_path in evaluation_configs:
         with open(data_config_path, 'r') as f:
             data_config = yaml.safe_load(f)
         dataset_base_name = create_filename_from_config(data_config)
-        dataset_path = project_root / "data" / f"{dataset_base_name}_dataset.csv"
-        if not dataset_path.exists():
-            print(f" - Skipping: Original dataset not found at {dataset_path}")
-            continue
+        input_dataset_path = dataset_path(project_root, data_config, dataset_base_name)
+        if not input_dataset_path.is_file():
+            raise FileNotFoundError(f"Original dataset not found: {input_dataset_path}")
         generator = GaussianDataGenerator(
             n_samples=data_config['dataset_settings']['n_samples'],
             n_features=data_config['dataset_settings']['n_initial_features'],
             random_state=data_config['global_settings']['random_seed']
         )
-        generator.data = pd.read_csv(dataset_path)
+        generator.data = pd.read_csv(input_dataset_path)
         generator.feature_based_metadata = {
             'signal_features': data_config['create_feature_based_signal_noise_classification']['signal_features'],
             'noise_features': data_config['create_feature_based_signal_noise_classification']['noise_features'],
@@ -224,14 +230,13 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
         for p_conf in perturb_data['perturbation_settings']:
             generator.apply_perturbation_from_config(p_conf)
 
-        perturbed_config = data_config.copy()
+        perturbed_config = deepcopy(data_config)
         perturbed_config['perturbation_settings'] = perturb_data['perturbation_settings']
         new_filename_base = create_filename_from_config(perturbed_config)
-        new_dataset_path = project_root / "data" / f"{new_filename_base}_dataset.csv"
-        generator.save_data(str(new_dataset_path))
+        new_dataset_path = dataset_path(project_root, perturbed_config, new_filename_base)
         new_config_path = data_config_dir / f"{new_filename_base}_config.yml"
-        with open(new_config_path, 'w') as f:
-            yaml.dump(perturbed_config, f, default_flow_style=False)
+        write_config_without_overwrite(new_config_path, perturbed_config)
+        generated.append(save_new_dataset(generator.data, new_dataset_path, new_config_path))
         print(f"Saved new config to: {new_config_path.name}")
         current_seed = data_config.get("global_settings", {}).get("random_seed", -1)
         if current_seed == 0 and "visualisation" in data_config:
@@ -257,3 +262,4 @@ def perturb_multi_seed(data_config_base: str, perturb_config: str):
             print(f"Generated visualisation: {feature_wise_plot_path}")
     
         print("\nMulti-seed perturbation complete.")
+    return generated

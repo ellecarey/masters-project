@@ -22,6 +22,12 @@ from torch.utils.data import DataLoader
 from src.training_module.trainer import train_model
 from src.utils.filenames import experiment_name, metrics_filename, model_filename
 from src.utils.plotting_helpers import generate_subtitle_from_config
+from src.utils.dataset_lifecycle import (
+    EvaluatedDataset,
+    dataset_path,
+    file_stamp,
+    validate_metrics,
+)
 
 TRAINING_SEED = 99
 
@@ -237,8 +243,8 @@ def evaluate_single_config(
     model_path: str, data_config_path: str, training_config_path: str
 ):
     """
-    Evaluate a pre-trained model on a single dataset's test split.
-    This will overwrite any existing metrics file for this dataset.
+    Evaluate a pre-trained model on the entire supplied evaluation dataset.
+    Refuse to overwrite existing metrics; return the newly saved metrics path.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"--- Evaluating model {model_path} on data from {data_config_path} ---")
@@ -356,17 +362,20 @@ def evaluate_single_config(
         "Recall": recall,
         "AUC": final_auc,
     }
-    with open(metrics_filepath, "w") as f:
-        json.dump(final_metrics, f, indent=4)
+    with open(metrics_filepath, "x") as f:
+        json.dump(final_metrics, f, indent=4, allow_nan=False)
     print(f"Evaluation metrics successfully saved to: {metrics_filepath}\n")
+    return metrics_filepath
 
 
 def evaluate_multi_seed(
-    trained_model_path: str, data_config_base: str, optimal_config: str
+    trained_model_path: str, data_config_base: str, optimal_config: str,
+    *, config_paths=None,
 ):
     """
     Evaluates a single pre-trained model over a multi-seed dataset family.
-    This will ignore the dedicated training seed and skip datasets with existing metrics.
+    Skip existing metrics but issue cleanup receipts only for fresh evaluations.
+    config_paths, when supplied, is the exact generation manifest for this call.
     """
     project_root = Path(data_utils.find_project_root())
     optimal_config_path = project_root / optimal_config
@@ -393,7 +402,11 @@ def evaluate_multi_seed(
     glob_pattern = f"{dataset_family_name}_seed*_config.yml"
     all_data_configs = sorted(list(data_config_dir.glob(glob_pattern)))
     # Exclude the training seed from evaluation
-    evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
+    evaluation_configs = (
+        [Path(p) for p in config_paths]
+        if config_paths is not None
+        else [p for p in all_data_configs if "_training" not in p.name]
+    )
 
     if not evaluation_configs:
         raise FileNotFoundError(
@@ -406,20 +419,21 @@ def evaluate_multi_seed(
         f"\nFound {len(evaluation_configs)} datasets to evaluate using model '{trained_model_path}'."
     )
     evaluations_run = 0
+    evaluated = {}
 
     for data_config_path in evaluation_configs:
         # Load the specific data config to derive the output filename
         current_data_config = data_utils.load_yaml_config(data_config_path)
         full_base = data_utils.create_filename_from_config(current_data_config)
+        if full_base.endswith("_training"):
+            raise ValueError(f"Training dataset cannot be evaluated as a seed: {data_config_path}")
 
         # Replicate logic from evaluate_single_config to find the metrics file path
         regex = r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)$"
         m = re.match(regex, full_base)
 
         if not m:
-            print(
-                f"Warning: Could not parse base/pert/seed from {full_base}. Running evaluation without check."
-            )
+            raise ValueError(f"Cannot parse evaluation dataset name: {full_base}")
         else:
             base, pert_tag, seed_str = m.group("base"), m.group("pert"), m.group("seed")
             seed = int(seed_str)
@@ -430,14 +444,25 @@ def evaluate_multi_seed(
 
             # Check if the metrics file already exists
             if metrics_filepath.exists():
+                validate_metrics(metrics_filepath)
                 print(
                     f"Skipping evaluation for {data_config_path.name}, metrics file already exists at '{metrics_filepath.name}'."
                 )
                 continue
 
         # If metrics file doesn't exist, run the evaluation
-        evaluate_single_config(
+        csv_path = dataset_path(project_root, current_data_config, full_base)
+        before = file_stamp(csv_path)
+        result = evaluate_single_config(
             trained_model_path, str(data_config_path), str(optimal_config_path)
+        )
+        if result is None or Path(result) != metrics_filepath:
+            raise RuntimeError(f"Evaluation did not confirm saved metrics: {data_config_path}")
+        validate_metrics(metrics_filepath)
+        if file_stamp(csv_path) != before:
+            raise RuntimeError(f"Dataset changed during evaluation: {csv_path}")
+        evaluated[csv_path] = EvaluatedDataset(
+            csv_path, before, metrics_filepath, file_stamp(metrics_filepath)
         )
         evaluations_run += 1
 
@@ -464,3 +489,4 @@ def evaluate_multi_seed(
 
     print(aggregate_command)
     print("\n" + "=" * 80)
+    return evaluated
