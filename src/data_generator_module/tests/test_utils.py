@@ -11,10 +11,10 @@ from data_generator_module.utils import (
 
 class TestFilenameGeneration:
     def test_create_filename_basic(self):
-        """Test basic filename generation"""
+        """Test discrete-feature naming with default separation and seed."""
         config = {
             "dataset_settings": {"n_samples": 100000, "n_initial_features": 5},
-            "feature_generation": {
+            "create_feature_based_signal_noise_classification": {
                 "feature_types": {
                     "feature_0": "discrete",
                     "feature_1": "discrete",
@@ -25,15 +25,15 @@ class TestFilenameGeneration:
             },
         }
 
-        expected = "n100000_f_init5_cont0_disc5"
+        expected = "n100000_f_init5_cont0_disc5_sep0p0_seed42"
         result = create_filename_from_config(config)
         assert result == expected
 
     def test_create_filename_mixed_types(self):
-        """Test filename generation with mixed feature types"""
+        """Test mixed-feature naming with default separation and seed."""
         config = {
             "dataset_settings": {"n_samples": 50000, "n_initial_features": 4},
-            "feature_generation": {
+            "create_feature_based_signal_noise_classification": {
                 "feature_types": {
                     "feature_0": "continuous",
                     "feature_1": "continuous",
@@ -43,27 +43,32 @@ class TestFilenameGeneration:
             },
         }
 
-        expected = "n50000_f_init4_cont2_disc2"
+        expected = "n50000_f_init4_cont2_disc2_sep0p0_seed42"
         result = create_filename_from_config(config)
         assert result == expected
 
     def test_create_filename_missing_keys(self):
-        """Test filename generation with missing keys uses defaults"""
+        """Test filename defaults when optional naming details are absent."""
         config = {"dataset_settings": {"n_samples": 1000}}
 
-        expected = "n1000_f_init5_cont0_disc0"
+        expected = "n1000_f_init0_cont0_disc0_sep0p0_seed42"
         result = create_filename_from_config(config)
         assert result == expected
 
 
 class TestPlotTitleGeneration:
     def test_create_plot_title_basic(self):
-        """Test basic plot title generation"""
+        """Test that the plot title describes the configured dataset."""
         config = {
             "dataset_settings": {"n_samples": 100000, "n_initial_features": 5},
             "create_feature_based_signal_noise_classification": {
-                "signal_distribution_params": {"mean": 2.0, "std": 0.8},
-                "noise_distribution_params": {"mean": -1.0, "std": 1.2},
+                "feature_types": {
+                    "feature_0": "discrete",
+                    "feature_1": "discrete",
+                    "feature_2": "discrete",
+                    "feature_3": "discrete",
+                    "feature_4": "discrete",
+                }
             },
         }
 
@@ -71,14 +76,16 @@ class TestPlotTitleGeneration:
 
         assert title == "Distribution of Generated Features"
         assert "100,000 Samples" in subtitle
-        assert "5 Features" in subtitle
-        assert "Feature-based Classification" in subtitle
+        assert "5 Features (0 Cont, 5 Disc)" in subtitle
+        assert "No Perturbations" in subtitle
+        assert "Std. Separation: 0.00" in subtitle
 
     def test_create_plot_title_fallback(self):
-        """Test plot title generation fallback"""
-        config = {}  # Empty config
+        """Test that an empty configuration produces a readable title."""
+        title, subtitle = create_plot_title_from_config({})
 
-        title, subtitle = create_plot_title_from_config(config)
-
-        assert title == "Feature Distribution"
-        assert subtitle == "Configuration details unavailable"
+        assert title == "Distribution of Generated Features"
+        assert subtitle == (
+            "Dataset: N/A Samples, 0 Features (0 Cont, 0 Disc)\n"
+            "No Perturbations | Std. Separation: 0.00"
+        )
