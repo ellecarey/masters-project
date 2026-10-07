@@ -121,9 +121,10 @@ class TestFeatureBasedSignalNoiseClassification:
 
 class Testvisualisation:
     def test_signal_noise_visualisation_with_custom_titles(
-        self, basic_generator, signal_noise_config
+        self, basic_generator, signal_noise_config, mocker
     ):
-        """Test signal vs noise visualisation with custom titles"""
+        """Test custom titles and chaining without opening plot windows."""
+        mocker.patch("matplotlib.pyplot.show")
         basic_generator.create_feature_based_signal_noise_classification(
             **signal_noise_config
         )

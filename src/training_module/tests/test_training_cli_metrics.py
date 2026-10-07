@@ -136,8 +136,16 @@ def test_training_auc_uses_probabilities(tmp_path, monkeypatch, mocker):
         "train_model",
         return_value=(model, {}, 1),
     )
-    mocker.patch.object(training_cli.train_utils, "plot_training_history")
-    mocker.patch.object(training_cli.train_utils, "plot_final_metrics")
+    mocker.patch.object(
+        training_cli.train_utils,
+        "plot_training_history",
+        autospec=True,
+    )
+    mocker.patch.object(
+        training_cli.train_utils,
+        "plot_final_metrics",
+        autospec=True,
+    )
 
     training_cli.train_single_config(
         str(tmp_path / "example_training_config.yml"),

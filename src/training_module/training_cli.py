@@ -209,20 +209,24 @@ def train_single_config(data_config_path: str, training_config_path: str):
 
     plot_subtitle = generate_subtitle_from_config(data_config)
 
+    plot_output_dir = model_output_dir / "figures" / exp_name
+    plot_output_dir.mkdir(parents=True, exist_ok=True)
+
     print("\n--- Generating Final Evaluation Plots ---")
     train_utils.plot_training_history(
         history=history,
         experiment_name=exp_name,
-        output_dir=Path("placeholder"),
-        subtitle=plot_subtitle,  # Pass the new subtitle
+        output_dir=plot_output_dir,
+        subtitle=plot_subtitle,
     )
     train_utils.plot_final_metrics(
         model=trained_model,
         test_loader=test_loader,
         device=device,
-        experiment_name=exp_name,
-        output_dir=Path("placeholder"),
-        subtitle=plot_subtitle,  # Pass the new subtitle
+        model_name=model_name,
+        trial_number=train_settings.get("optimal_trial_number"),
+        output_dir=plot_output_dir,
+        subtitle=plot_subtitle,
     )
 
     torch.save(trained_model.state_dict(), model_filepath)

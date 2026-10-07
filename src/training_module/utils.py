@@ -6,11 +6,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 import numpy as np
-from sklearn.calibration import calibration_curve
 from sklearn.metrics import confusion_matrix, roc_curve, auc
-from src.utils.report_paths import artefact_path, experiment_family_path, extract_family_base
-import re
-from src.utils.plotting_helpers import format_plot_title, apply_decimal_formatters
+
 
 def find_project_root():
     """Find the project root by searching upwards for a marker file."""
@@ -200,29 +197,32 @@ def rename_config_file(original_config_path, experiment_name):
         print(f"Warning: Could not rename config file: {e}")
         return str(config_path)
 
-def plot_training_history(history: dict, experiment_name: str, output_dir: str, subtitle: str = None):
+
+def plot_training_history(
+    history: dict, experiment_name: str, output_dir: str, subtitle: str = None
+):
     """
     Plots training and validation loss and accuracy from a history dictionary.
-    
+
     """
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
 
     # Plotting Loss
-    ax1.plot(history['train_loss'], label='Training Loss')
-    ax1.plot(history['val_loss'], label='Validation Loss')
-    ax1.set_title('Loss During Training')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
+    ax1.plot(history["train_loss"], label="Training Loss")
+    ax1.plot(history["val_loss"], label="Validation Loss")
+    ax1.set_title("Loss During Training")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
     ax1.legend()
     ax1.grid(True)
 
     # Plotting Accuracy
-    ax2.plot(history['train_acc_epoch_end'], label='Training Accuracy')
-    ax2.plot(history['val_acc'], label='Validation Accuracy')
-    ax2.set_title('Accuracy During Training')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Accuracy')
+    ax2.plot(history["train_acc_epoch_end"], label="Training Accuracy")
+    ax2.plot(history["val_acc"], label="Validation Accuracy")
+    ax2.set_title("Accuracy During Training")
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("Accuracy")
     ax2.legend()
     ax2.grid(True)
 
@@ -233,17 +233,26 @@ def plot_training_history(history: dict, experiment_name: str, output_dir: str, 
         plt.tight_layout()
 
     save_path = os.path.join(output_dir, f"{experiment_name}.pdf")
-    plt.savefig(save_path, bbox_inches='tight')
+    plt.savefig(save_path, bbox_inches="tight")
     plt.close()
 
     print(f"Saved training history plot to: {save_path}")
 
 
-
-def plot_final_metrics(model, test_loader, device, model_name: str, trial_number: int, output_dir: str, subtitle: str = None):
+def plot_final_metrics(
+    model,
+    test_loader,
+    device,
+    model_name: str,
+    trial_number: int | None,
+    output_dir: str,
+    subtitle: str = None,
+):
     """
     Generates and saves ROC curve and confusion matrix plots with consistent naming.
     """
+    trial_suffix = f"_trial{trial_number}" if trial_number is not None else ""
+
     model.to(device)
     model.eval()
     all_labels = []
@@ -260,37 +269,53 @@ def plot_final_metrics(model, test_loader, device, model_name: str, trial_number
     fpr, tpr, _ = roc_curve(all_labels, all_scores)
     roc_auc = auc(fpr, tpr)
     plt.figure()
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver Operating Characteristic (ROC) Curve')
+    plt.plot(
+        fpr, tpr, color="darkorange", lw=2, label=f"ROC curve (AUC = {roc_auc:.2f})"
+    )
+    plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("Receiver Operating Characteristic (ROC) Curve")
     plt.legend(loc="lower right")
     if subtitle:
         plt.suptitle(subtitle, y=0.98)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
-    
-    roc_save_path = os.path.join(output_dir, f"{model_name}_roc_curve_trial{trial_number}.pdf")
-    plt.savefig(roc_save_path, bbox_inches='tight')
+
+    roc_save_path = os.path.join(
+        output_dir, f"{model_name}_roc_curve{trial_suffix}.pdf"
+    )
+    plt.savefig(roc_save_path, bbox_inches="tight")
     plt.close()
 
     # --- Confusion Matrix ---
     predictions = [1 if score > 0.5 else 0 for score in all_scores]
     cm = confusion_matrix(all_labels, predictions)
     plt.figure()
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Predicted Negative', 'Predicted Positive'], yticklabels=['Actual Negative', 'Actual Positive'])
-    plt.ylabel('Actual Label')
-    plt.xlabel('Predicted Label')
-    plt.title('Confusion Matrix')
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=["Predicted Negative", "Predicted Positive"],
+        yticklabels=["Actual Negative", "Actual Positive"],
+    )
+    plt.ylabel("Actual Label")
+    plt.xlabel("Predicted Label")
+    plt.title("Confusion Matrix")
     if subtitle:
         plt.suptitle(subtitle, y=0.98)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-    cm_save_path = os.path.join(output_dir, f"{model_name}_confusion_matrix_trial{trial_number}.pdf")
-    plt.savefig(cm_save_path, bbox_inches='tight')
+    cm_save_path = os.path.join(
+        output_dir, f"{model_name}_confusion_matrix{trial_suffix}.pdf"
+    )
+    plt.savefig(cm_save_path, bbox_inches="tight")
     plt.close()
 
-def plot_combined_training_histories(candidate_info: list, output_dir: str, model_name: str, subtitle: str = None):
+
+def plot_combined_training_histories(
+    candidate_info: list, output_dir: str, model_name: str, subtitle: str = None
+):
     """
     Plots training histories with fully adaptive, padded axes for maximum readability.
     Each subplot scales independently to show its own training dynamics clearly.
@@ -301,45 +326,46 @@ def plot_combined_training_histories(candidate_info: list, output_dir: str, mode
     num_candidates = len(candidate_info)
     # Each subplot will have fully independent axes for maximum clarity.
     fig, axes = plt.subplots(
-        num_candidates, 2,
+        num_candidates,
+        2,
         figsize=(16, 5 * num_candidates),
-        sharex=False, # Independent x-axes
-        sharey=False, # Independent y-axes
-        squeeze=False
+        sharex=False,  # Independent x-axes
+        sharey=False,  # Independent y-axes
+        squeeze=False,
     )
 
     for i, info in enumerate(candidate_info):
-        history = info.get('history', {})
+        history = info.get("history", {})
         ax_loss = axes[i, 0]
         ax_acc = axes[i, 1]
 
         # --- Plot Titles (working correctly) ---
-        rank = info.get('rank', 'N/A')
-        trial_number = info.get('trial_number', 'N/A')
-        training_time = info.get('training_time', 'N/A')
-        final_val_loss = history.get('val_loss', [float('nan')])[-1]
-        final_val_acc = history.get('val_acc', [float('nan')])[-1]
+        rank = info.get("rank", "N/A")
+        trial_number = info.get("trial_number", "N/A")
+        training_time = info.get("training_time", "N/A")
+        final_val_loss = history.get("val_loss", [float("nan")])[-1]
+        final_val_acc = history.get("val_acc", [float("nan")])[-1]
         candidate_title = (
             f"Candidate {rank} (Trial #{trial_number}) | Time: {training_time}s\n"
             f"Final Val Loss: {final_val_loss:.4f} | Final Val Acc: {final_val_acc:.4f}"
         )
-        ax_loss.set_title(candidate_title, loc='left', pad=10)
-        ax_acc.set_title("Accuracy Curves", loc='left', pad=10)
+        ax_loss.set_title(candidate_title, loc="left", pad=10)
+        ax_acc.set_title("Accuracy Curves", loc="left", pad=10)
         ax_loss.set_ylabel("Loss")
         ax_acc.set_ylabel("Accuracy")
 
         # --- Plotting Data ---
-        train_loss = history.get('train_loss', [])
-        val_loss = history.get('val_loss', [])
-        ax_loss.plot(train_loss, label='Train Loss', color='C0')
-        ax_loss.plot(val_loss, label='Validation Loss', color='C1')
+        train_loss = history.get("train_loss", [])
+        val_loss = history.get("val_loss", [])
+        ax_loss.plot(train_loss, label="Train Loss", color="C0")
+        ax_loss.plot(val_loss, label="Validation Loss", color="C1")
         ax_loss.legend()
         ax_loss.grid(True)
 
-        train_acc = history.get('train_acc_epoch_end', [])
-        val_acc = history.get('val_acc', [])
-        ax_acc.plot(train_acc, label='Train Accuracy', color='C0')
-        ax_acc.plot(val_acc, label='Validation Accuracy', color='C1')
+        train_acc = history.get("train_acc_epoch_end", [])
+        val_acc = history.get("val_acc", [])
+        ax_acc.plot(train_acc, label="Train Accuracy", color="C0")
+        ax_acc.plot(val_acc, label="Validation Accuracy", color="C1")
         ax_acc.legend()
         ax_acc.grid(True)
 
@@ -361,10 +387,14 @@ def plot_combined_training_histories(candidate_info: list, output_dir: str, mode
             # Set x-axis ticks to be integers only
             ax_loss.set_xticks(range(0, num_epochs, max(1, num_epochs // 10)))
             ax_acc.set_xticks(range(0, num_epochs, max(1, num_epochs // 10)))
-            
+
             # Force integer formatting for x-axis labels
-            ax_loss.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
-            ax_acc.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
+            ax_loss.xaxis.set_major_formatter(
+                plt.FuncFormatter(lambda x, p: f"{int(x)}")
+            )
+            ax_acc.xaxis.set_major_formatter(
+                plt.FuncFormatter(lambda x, p: f"{int(x)}")
+            )
 
         # 2. Y-Axis Limits for Loss Plot
         all_losses = train_loss + val_loss
@@ -377,7 +407,7 @@ def plot_combined_training_histories(candidate_info: list, output_dir: str, mode
         if all_accs:
             y_min, y_max = np.min(all_accs), np.max(all_accs)
             y_range = y_max - y_min
-            
+
             # Same logic as loss: start from reasonable minimum, scale to data + padding
             if y_range > 0:
                 # Use the minimum accuracy as the base (like loss uses 0)
@@ -385,7 +415,9 @@ def plot_combined_training_histories(candidate_info: list, output_dir: str, mode
                 padding_below = min(0.02, y_range * 0.1)  # Small buffer below, max 2%
                 lower_bound = max(0.0, y_min - padding_below)
                 upper_bound = y_max * 1.1  # Same 10% padding as loss plots
-                ax_acc.set_ylim(lower_bound, min(upper_bound, 1.01))  # Cap at reasonable max
+                ax_acc.set_ylim(
+                    lower_bound, min(upper_bound, 1.01)
+                )  # Cap at reasonable max
             else:
                 # Fallback for flat lines
                 center = y_min
@@ -407,8 +439,8 @@ def plot_combined_training_histories(candidate_info: list, output_dir: str, mode
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     save_path = os.path.join(output_dir, f"{model_name}_combined_training_history.pdf")
-    plt.savefig(save_path, bbox_inches='tight')
+    plt.savefig(save_path, bbox_inches="tight")
     plt.close()
-    print(f"Saved combined training history plot with fully adaptive axes to: {save_path}")
-
-
+    print(
+        f"Saved combined training history plot with fully adaptive axes to: {save_path}"
+    )
