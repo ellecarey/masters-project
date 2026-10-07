@@ -248,8 +248,9 @@ def evaluate_single_config(
         data_config = data_utils.load_yaml_config(data_config_path)
         training_config = data_utils.load_yaml_config(training_config_path)
     except FileNotFoundError as e:
-        print(f"Error: Configuration file not found - {e}")
-        return
+        raise FileNotFoundError(
+            f"Cannot evaluate model: configuration file not found: {e.filename}"
+        ) from e
 
     train_settings = training_config["training_settings"]
     model_name = train_settings["model_name"]
@@ -285,11 +286,11 @@ def evaluate_single_config(
     dataset_filepath = data_dir / f"{full_base}_dataset.csv"
     try:
         data = pd.read_csv(dataset_filepath)
-    except FileNotFoundError:
-        print(
-            f"Error: Data file not found at '{dataset_filepath}'. Please generate it first."
-        )
-        return
+    except FileNotFoundError as e:
+        raise FileNotFoundError(
+            f"Cannot evaluate model: dataset not found at "
+            f"'{dataset_filepath}'. Please generate it first."
+        ) from e
 
     # --- Prepare Full Dataset for Evaluation
     target_column = train_settings["target_column"]
@@ -374,8 +375,10 @@ def evaluate_multi_seed(
     try:
         training_config = data_utils.load_yaml_config(optimal_config_path)
     except FileNotFoundError as e:
-        print(f"Error: Optimal training config file not found - {e}")
-        return
+        raise FileNotFoundError(
+            f"Cannot evaluate dataset family: optimal training configuration "
+            f"not found at '{optimal_config_path}'."
+        ) from e
 
     train_settings = training_config["training_settings"]
     model_name = train_settings["model_name"]
@@ -393,10 +396,11 @@ def evaluate_multi_seed(
     evaluation_configs = [p for p in all_data_configs if "_training" not in p.name]
 
     if not evaluation_configs:
-        print(
-            f"Error: No evaluation data configs found for family '{dataset_family_name}' in '{data_config_dir}'"
+        raise FileNotFoundError(
+            f"No evaluation data configs found for family "
+            f"'{dataset_family_name}' in '{data_config_dir}'. "
+            "Stopping without reporting evaluation as complete."
         )
-        return
 
     print(
         f"\nFound {len(evaluation_configs)} datasets to evaluate using model '{trained_model_path}'."
