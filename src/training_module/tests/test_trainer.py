@@ -22,6 +22,7 @@ def test_train_model_updates_weights(initialised_model, sample_data_loader):
         criterion=criterion,
         optimiser=optimiser,
         epochs=1,
+        device=torch.device("cpu"),
     )
 
     # Get weights after training
@@ -31,18 +32,36 @@ def test_train_model_updates_weights(initialised_model, sample_data_loader):
     assert not torch.equal(initial_weights, updated_weights)
 
 
-def test_train_model_returns_trained_model(initialised_model, sample_data_loader):
-    """Tests if the function returns a model instance."""
+def test_train_model_returns_model_history_and_best_epoch(
+    initialised_model, sample_data_loader
+):
+    """Tests the documented return values after one training epoch."""
     criterion = nn.BCEWithLogitsLoss()
     optimiser = torch.optim.Adam(initialised_model.parameters(), lr=0.001)
 
-    trained_model = train_model(
+    trained_model, history, best_epoch = train_model(
         model=initialised_model,
         train_loader=sample_data_loader,
         validation_loader=sample_data_loader,
         criterion=criterion,
         optimiser=optimiser,
         epochs=1,
+        device=torch.device("cpu"),
     )
 
     assert isinstance(trained_model, torch.nn.Module)
+    assert isinstance(history, dict)
+
+    # One training epoch with validation should record one of each metric.
+    for metric in (
+        "train_loss",
+        "train_acc_epoch_end",
+        "val_loss",
+        "val_acc",
+        "val_auc",
+    ):
+        assert metric in history
+        assert len(history[metric]) == 1
+
+    # With only one epoch, the best epoch must be epoch 1.
+    assert best_epoch == 1

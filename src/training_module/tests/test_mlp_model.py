@@ -1,5 +1,5 @@
 import torch
-from training_module.mlp_model import MLP
+# from training_module.models import mlp_001
 
 
 def test_mlp_initialisation(initialised_model):

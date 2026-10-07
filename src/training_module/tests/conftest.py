@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 from torch.utils.data import DataLoader
 
-from training_module.mlp_model import MLP
+from training_module.models import mlp_001
 from training_module.dataset import TabularDataset
 
 
@@ -36,4 +36,4 @@ def sample_data_loader(sample_tabular_dataset):
 def initialised_model():
     """Initializes a standard MLP model for testing."""
     # input_size=3 corresponds to the three features in sample_training_data
-    return MLP(input_size=3, hidden_size=16, output_size=1)
+    return mlp_001(input_size=3, hidden_size=16, output_size=1)
