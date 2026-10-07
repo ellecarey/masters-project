@@ -6,14 +6,15 @@ from pathlib import Path
 import optuna
 from tqdm import tqdm
 import pandas as pd
-import copy
 import torch
 import os
 import json
-import shutil
 import matplotlib.pyplot as plt
 from optuna.trial import TrialState
-from optuna.visualization.matplotlib import plot_optimization_history, plot_param_importances
+from optuna.visualization.matplotlib import (
+    plot_optimization_history,
+    plot_param_importances,
+)
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -24,19 +25,35 @@ from src.training_module.trainer import train_model
 from sklearn.model_selection import train_test_split
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from src.data_generator_module.utils import find_project_root, create_filename_from_config
+from src.data_generator_module.utils import (
+    find_project_root,
+    create_filename_from_config,
+)
 from src.utils.report_paths import extract_family_base
 from src.utils.plotting_helpers import generate_subtitle_from_config
 from src.data_generator_module.plotting_style import apply_custom_plot_style
-from src.training_module.utils import plot_training_history, plot_final_metrics, plot_combined_training_histories
+from src.training_module.utils import (
+    plot_training_history,
+    plot_final_metrics,
+    plot_combined_training_histories,
+)
 
 
 def train_candidate_worker(args):
     """
     Worker function for training a single candidate on a sampled dataset.
     """
-    trial_data, i, tuning_config_data, dataset_filepath, output_plot_dir, \
-    model_name, scheduler_settings, early_stopping_settings, sample_fraction = args
+    (
+        trial_data,
+        i,
+        tuning_config_data,
+        dataset_filepath,
+        output_plot_dir,
+        model_name,
+        scheduler_settings,
+        early_stopping_settings,
+        sample_fraction,
+    ) = args
 
     # --- Data loading and splitting inside the worker ---
     full_data = pd.read_csv(dataset_filepath)
@@ -44,7 +61,7 @@ def train_candidate_worker(args):
     X = full_data.drop(columns=[target_column])
     y = full_data[target_column]
 
-    trial_number = trial_data['number']
+    trial_number = trial_data["number"]
 
     if sample_fraction < 1.0:
         X_sample, _, y_sample, _ = train_test_split(
@@ -59,8 +76,8 @@ def train_candidate_worker(args):
     )
     # --- End of data loading block ---
 
-    trial_params = trial_data['params']
-    training_time = trial_data.get('training_time', 'N/A')
+    trial_params = trial_data["params"]
+    training_time = trial_data.get("training_time", "N/A")
 
     # model_name = tuning_config_dict["model_name"]
     arch_model_name = tuning_config_data.get("model_name", "mlp_001")
@@ -77,8 +94,12 @@ def train_candidate_worker(args):
 
     train_dataset = TabularDataset(X_train, y_train)
     val_dataset = TabularDataset(X_val, y_val)
-    train_loader = DataLoader(dataset=train_dataset, batch_size=trial_params["batch_size"], shuffle=True)
-    val_loader = DataLoader(dataset=val_dataset, batch_size=trial_params["batch_size"], shuffle=False)
+    train_loader = DataLoader(
+        dataset=train_dataset, batch_size=trial_params["batch_size"], shuffle=True
+    )
+    val_loader = DataLoader(
+        dataset=val_dataset, batch_size=trial_params["batch_size"], shuffle=False
+    )
 
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=trial_params["learning_rate"])
@@ -86,9 +107,9 @@ def train_candidate_worker(args):
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        mode=scheduler_settings.get('mode', 'min'),
-        factor=scheduler_settings.get('factor', 0.1),
-        patience=scheduler_settings.get('patience', 5)
+        mode=scheduler_settings.get("mode", "min"),
+        factor=scheduler_settings.get("factor", 0.1),
+        patience=scheduler_settings.get("patience", 5),
     )
     patience = early_stopping_settings.get("patience", 20)
 
@@ -103,17 +124,19 @@ def train_candidate_worker(args):
         verbose=False,
         scheduler=scheduler,
         early_stopping_enabled=True,
-        patience=patience
+        patience=patience,
     )
 
-    plot_subtitle = f"Candidate {i+1} - Trial #{trial_number}\nParams: {json.dumps(trial_params)}"
+    plot_subtitle = (
+        f"Candidate {i + 1} - Trial #{trial_number}\nParams: {json.dumps(trial_params)}"
+    )
     history_plot_name = f"{model_name}_training_history_trial{trial_number}"
 
     plot_training_history(
         history=history,
         experiment_name=history_plot_name,
         output_dir=output_plot_dir,
-        subtitle=plot_subtitle
+        subtitle=plot_subtitle,
     )
 
     plot_final_metrics(
@@ -123,32 +146,33 @@ def train_candidate_worker(args):
         model_name=model_name,
         trial_number=trial_number,
         output_dir=output_plot_dir,
-        subtitle=plot_subtitle
+        subtitle=plot_subtitle,
     )
 
-    candidate_key = f"candidate_{i+1}_trial_{trial_number}"
+    candidate_key = f"candidate_{i + 1}_trial_{trial_number}"
     time_str = f"{training_time:.2f}" if isinstance(training_time, float) else "N/A"
 
     return {
-        'rank': i+1,
-        'trial_number': trial_data['number'],
-        'trial_value': trial_data['value'],
-        'trial_params': trial_params,
-        'auc': trial_data['value'],
-        'params': trial_params,
-        'training_time': time_str,
-        'model_key': candidate_key,
-        'model_state': trained_model.state_dict(),
-        'history': history,
-        'X_train_shape': X_train.shape
+        "rank": i + 1,
+        "trial_number": trial_data["number"],
+        "trial_value": trial_data["value"],
+        "trial_params": trial_params,
+        "auc": trial_data["value"],
+        "params": trial_params,
+        "training_time": time_str,
+        "model_key": candidate_key,
+        "model_state": trained_model.state_dict(),
+        "history": history,
+        "X_train_shape": X_train.shape,
     }
+
 
 def run_hyperparameter_tuning(
     data_config: str,
     tuning_config: str,
     base_training_config: str,
     sample_fraction: float = 0.8,
-    n_trials: int = 50
+    n_trials: int = 50,
 ):
     apply_custom_plot_style()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -175,10 +199,14 @@ def run_hyperparameter_tuning(
         # Sample data for the trial
         X_full = full_data.drop(columns=["target"])
         y_full = full_data["target"]
-        
+
         if sample_fraction < 1.0:
             X_sample, _, y_sample, _ = train_test_split(
-                X_full, y_full, train_size=sample_fraction, stratify=y_full, random_state=trial.number
+                X_full,
+                y_full,
+                train_size=sample_fraction,
+                stratify=y_full,
+                random_state=trial.number,
             )
         else:
             X_sample, y_sample = X_full, y_full
@@ -198,30 +226,44 @@ def run_hyperparameter_tuning(
                 hyperparams[param] = trial.suggest_float(param, **config_copy)
             elif param_type == "int":
                 hyperparams[param] = trial.suggest_int(param, **config_copy)
-        
+
         # Setup model, data, and training components
         model_name = tuning_config_dict["model_name"]
         ARCH_PARAMS = {"mlp_001": {"hidden_size"}}
-        model_params = {key: hyperparams[key] for key in hyperparams if key in ARCH_PARAMS.get(model_name, set())}
+        model_params = {
+            key: hyperparams[key]
+            for key in hyperparams
+            if key in ARCH_PARAMS.get(model_name, set())
+        }
         model_params["input_size"] = X_sample.shape[1]
         model_params["output_size"] = 1
         model = get_model(model_name, model_params)
 
         data_utils.set_global_seed(trial.number)
         X_train, X_val, y_train, y_val = train_test_split(
-            X_sample, y_sample, test_size=0.2, random_state=trial.number, stratify=y_sample
+            X_sample,
+            y_sample,
+            test_size=0.2,
+            random_state=trial.number,
+            stratify=y_sample,
         )
 
         train_dataset = TabularDataset(X_train, y_train)
         val_dataset = TabularDataset(X_val, y_val)
-        train_loader = DataLoader(dataset=train_dataset, batch_size=hyperparams["batch_size"], shuffle=True)
-        val_loader = DataLoader(dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False)
+        train_loader = DataLoader(
+            dataset=train_dataset, batch_size=hyperparams["batch_size"], shuffle=True
+        )
+        val_loader = DataLoader(
+            dataset=val_dataset, batch_size=hyperparams["batch_size"], shuffle=False
+        )
 
         criterion = nn.BCEWithLogitsLoss()
         optimiser = torch.optim.Adam(
             model.parameters(),
             lr=hyperparams["learning_rate"],
-            weight_decay=hyperparams.get("weight_decay", 0.0) # Use .get for optional params
+            weight_decay=hyperparams.get(
+                "weight_decay", 0.0
+            ),  # Use .get for optional params
         )
 
         start_time = time.time()
@@ -237,7 +279,9 @@ def run_hyperparameter_tuning(
                 device=device,
                 trial=trial,
                 early_stopping_enabled=True,
-                patience=tuning_config_dict.get("early_stopping_settings", {}).get("patience", 20)
+                patience=tuning_config_dict.get("early_stopping_settings", {}).get(
+                    "patience", 20
+                ),
             )
         except optuna.TrialPruned:
             raise
@@ -247,14 +291,14 @@ def run_hyperparameter_tuning(
         # --- Retrieve final validation AUC from history ---
         # The history from train_model now includes 'val_auc'. We get the last value.
         final_val_auc = history.get("val_auc", [0.0])[-1]
-        final_val_loss = history.get("val_loss", [float('inf')])[-1]
+        final_val_loss = history.get("val_loss", [float("inf")])[-1]
 
         # --- Store useful metrics as user attributes for later analysis ---
         trial.set_user_attr("training_time", training_time)
         trial.set_user_attr("best_epoch", best_epoch)
         trial.set_user_attr("final_val_auc", final_val_auc)
         trial.set_user_attr("final_val_loss", final_val_loss)
-        
+
         # --- Return the value for Optuna to optimize ---
         # The study is configured to MINIMIZE the objective's return value.
         # To MAXIMIZE AUC, we return (1.0 - AUC).
@@ -263,7 +307,6 @@ def run_hyperparameter_tuning(
     # Run the optimization
     study.optimize(objective, n_trials=n_trials)
     print(f"\nWorker has finished its trials for study '{study_name}'.")
-
 
 
 def run_experiments(job: str, data_config_path: str = None):
@@ -289,30 +332,42 @@ def run_experiments(job: str, data_config_path: str = None):
             selected_data_config_path = project_root / data_config_path
 
         if not selected_data_config_path.exists():
-            print(f"Error: Provided data config file not found at '{selected_data_config_path}'")
+            print(
+                f"Error: Provided data config file not found at '{selected_data_config_path}'"
+            )
             sys.exit(1)
         print(f"Using provided data config: {selected_data_config_path.name}")
     else:
         # Fallback to interactive selection
         config_dir = project_root / "configs" / "data_generation"
         available_configs = [
-            path for path in sorted(list(config_dir.glob("*.yml"))) if "_training_config.yml" in path.name
+            path
+            for path in sorted(list(config_dir.glob("*.yml")))
+            if "_training_config.yml" in path.name
         ]
 
         if not available_configs:
-            print(f"Error: No '_training' data configuration files found in '{config_dir}'.")
+            print(
+                f"Error: No '_training' data configuration files found in '{config_dir}'."
+            )
             sys.exit(1)
 
         if len(available_configs) == 1:
             selected_data_config_path = available_configs[0]
-            print(f"Automatically selected the only available training config: {selected_data_config_path.name}")
+            print(
+                f"Automatically selected the only available training config: {selected_data_config_path.name}"
+            )
         else:
-            print("\nPlease select a _training data configuration to run the tuning job on:")
+            print(
+                "\nPlease select a _training data configuration to run the tuning job on:"
+            )
             for i, path in enumerate(available_configs):
                 print(f" [{i + 1}] {path.name}")
             while True:
                 try:
-                    choice = input(f"\nEnter the number of the config to use (1-{len(available_configs)}): ")
+                    choice = input(
+                        f"\nEnter the number of the config to use (1-{len(available_configs)}): "
+                    )
                     choice_idx = int(choice) - 1
                     if 0 <= choice_idx < len(available_configs):
                         selected_data_config_path = available_configs[choice_idx]
@@ -349,7 +404,9 @@ def run_experiments(job: str, data_config_path: str = None):
     model_name_suffix = base_training_config_path.stem
     study_name = f"{dataset_base_name}_{model_name_suffix}"
     storage_name = f"sqlite:///db/{study_name}_tuning.db"
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=5, interval_steps=1)
+    pruner = optuna.pruners.MedianPruner(
+        n_startup_trials=5, n_warmup_steps=5, interval_steps=1
+    )
     optuna.create_study(
         study_name=study_name,
         storage=storage_name,
@@ -358,18 +415,30 @@ def run_experiments(job: str, data_config_path: str = None):
         pruner=pruner,
     )
 
-    print(f"Successfully created or loaded study '{study_name}' in '{storage_name}' for MINIMIZATION")
+    print(
+        f"Successfully created or loaded study '{study_name}' in '{storage_name}' for MINIMIZATION"
+    )
 
     # --- Launch Worker Processes ---
     print(f"\n--- Starting Job: {job} ---")
-    n_trials_per_worker = (job_params['n_trials'] + job_params['num_workers'] - 1) // job_params['num_workers']
+    n_trials_per_worker = (
+        job_params["n_trials"] + job_params["num_workers"] - 1
+    ) // job_params["num_workers"]
     command = [
-        "uv", "run", "experiment_manager.py", "tune-worker",
-        "--data-config", str(selected_data_config_path),
-        "--tuning-config", str((project_root / job_params["tuning_config"]).resolve()),
-        "--base-training-config", str(base_training_config_path.resolve()),
-        "--n-trials", str(n_trials_per_worker),
-        "--sample-fraction", str(job_params["sample_fraction"]),
+        "uv",
+        "run",
+        "experiment_manager.py",
+        "tune-worker",
+        "--data-config",
+        str(selected_data_config_path),
+        "--tuning-config",
+        str((project_root / job_params["tuning_config"]).resolve()),
+        "--base-training-config",
+        str(base_training_config_path.resolve()),
+        "--n-trials",
+        str(n_trials_per_worker),
+        "--sample-fraction",
+        str(job_params["sample_fraction"]),
     ]
 
     # uncomment for worker debugging
@@ -379,19 +448,27 @@ def run_experiments(job: str, data_config_path: str = None):
     # ]
 
     # print(f"All {len(workers)} workers launched. Monitoring study progress...")
-    
+
     workers = [
-        subprocess.Popen(command, cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(job_params['num_workers'])
+        subprocess.Popen(
+            command,
+            cwd=project_root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        for _ in range(job_params["num_workers"])
     ]
 
     print(f"All {len(workers)} workers launched. Monitoring study progress...")
-    with tqdm(total=job_params['n_trials'], desc="Overall Tuning Progress") as pbar:
+    with tqdm(total=job_params["n_trials"], desc="Overall Tuning Progress") as pbar:
         finished_trial_count = 0
-        while finished_trial_count < job_params['n_trials']:
+        while finished_trial_count < job_params["n_trials"]:
             try:
                 study = optuna.load_study(study_name=study_name, storage=storage_name)
-                finished_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL])
+                finished_trials = study.get_trials(
+                    deepcopy=False,
+                    states=[TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL],
+                )
                 pbar.update(len(finished_trials) - finished_trial_count)
                 finished_trial_count = len(finished_trials)
                 time.sleep(2)
@@ -401,8 +478,10 @@ def run_experiments(job: str, data_config_path: str = None):
     print("\n--- All workers have finished. Job complete. ---")
 
     # --- Display Next Steps ---
-    print("\n" + "="*80)
-    print("Tuning phase is complete. To analyse the results and select the best trial, run:")
+    print("\n" + "=" * 80)
+    print(
+        "Tuning phase is complete. To analyse the results and select the best trial, run:"
+    )
     analysis_command = (
         f"uv run experiment_manager.py tune-analysis \\\n"
         f" --data-config {selected_data_config_path} \\\n"
@@ -410,11 +489,15 @@ def run_experiments(job: str, data_config_path: str = None):
         f" --sample-fraction {job_params['sample_fraction']}"
     )
     print(analysis_command)
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
 
-
-def run_tuning_analysis(data_config: str, base_training_config: str, sample_fraction: float, non_interactive: bool = False):
+def run_tuning_analysis(
+    data_config: str,
+    base_training_config: str,
+    sample_fraction: float,
+    non_interactive: bool = False,
+):
     """
     Analyse a completed Optuna study, generate plots, and allow interactive selection.
     Retrains the final selected model on the full dataset.
@@ -429,11 +512,17 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     base_training_config_path = Path(base_training_config)
 
     base_train_config_dict = data_utils.load_yaml_config(base_training_config_path)
-    scheduler_settings = base_train_config_dict.get("training_settings", {}).get("scheduler_settings", {})
-    early_stopping_settings = base_train_config_dict.get("training_settings", {}).get("early_stopping_settings", {})
+    scheduler_settings = base_train_config_dict.get("training_settings", {}).get(
+        "scheduler_settings", {}
+    )
+    early_stopping_settings = base_train_config_dict.get("training_settings", {}).get(
+        "early_stopping_settings", {}
+    )
 
     data_config_dict = data_utils.load_yaml_config(data_config_path)
-    tuning_config_path = project_root / "configs" / "tuning" / f"{base_training_config_path.stem}.yml"
+    tuning_config_path = (
+        project_root / "configs" / "tuning" / f"{base_training_config_path.stem}.yml"
+    )
     try:
         tuning_config = data_utils.load_yaml_config(tuning_config_path)
     except FileNotFoundError:
@@ -447,24 +536,32 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
 
     print("\n--- Clearing old analysis plots ---")
     base_family = extract_family_base(dataset_base_name)
-    
+
     # Define plot directories
-    output_plot_dir = project_root / "reports" / "figures" / base_family / dataset_base_name
-    tuning_output_plot_dir = project_root / "reports" / "figures" / base_family / f"{model_name_suffix}_tuning"
+    output_plot_dir = (
+        project_root / "reports" / "figures" / base_family / dataset_base_name
+    )
+    tuning_output_plot_dir = (
+        project_root
+        / "reports"
+        / "figures"
+        / base_family
+        / f"{model_name_suffix}_tuning"
+    )
 
     # # Delete directories if they exist
     # if output_plot_dir.exists():
     #     shutil.rmtree(output_plot_dir)
     #     print(f"Removed old directory: {output_plot_dir}")
-    
+
     # if tuning_output_plot_dir.exists():
     #     shutil.rmtree(tuning_output_plot_dir)
     #     print(f"Removed old directory: {tuning_output_plot_dir}")
-        
+
     # Recreate the main directory for candidate plots
     output_plot_dir.mkdir(parents=True, exist_ok=True)
     print(f"Plots will be saved to: {output_plot_dir}")
-    
+
     print(f"--- Analysing Study: {study_name} ---")
     try:
         study = optuna.load_study(study_name=study_name, storage=storage_name)
@@ -476,7 +573,7 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     if not completed_trials:
         print("Error: No trials completed successfully.")
         return
-        
+
     completed_trials.sort(key=lambda t: t.value, reverse=False)
     top_trials = completed_trials[:5]
 
@@ -487,51 +584,68 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         return
 
     base_family = extract_family_base(dataset_base_name)
-    output_plot_dir = project_root / "reports" / "figures" / base_family / dataset_base_name
+    output_plot_dir = (
+        project_root / "reports" / "figures" / base_family / dataset_base_name
+    )
     output_plot_dir.mkdir(parents=True, exist_ok=True)
     print(f"Plots will be saved to: {output_plot_dir}")
 
     trial_args = []
     for i, trial in enumerate(top_trials):
         trial_data = {
-            'params': trial.params, 'number': trial.number, 'value': trial.value,
-            'training_time': trial.user_attrs.get('training_time', 'N/A')
+            "params": trial.params,
+            "number": trial.number,
+            "value": trial.value,
+            "training_time": trial.user_attrs.get("training_time", "N/A"),
         }
         args = (
-            trial_data, i, tuning_config, dataset_filepath, output_plot_dir,
-            model_name_suffix, scheduler_settings, early_stopping_settings, sample_fraction
+            trial_data,
+            i,
+            tuning_config,
+            dataset_filepath,
+            output_plot_dir,
+            model_name_suffix,
+            scheduler_settings,
+            early_stopping_settings,
+            sample_fraction,
         )
         trial_args.append(args)
 
     candidate_info = []
     trained_models = {}
     max_workers = min(5, os.cpu_count() or 1, len(top_trials))
-    
+
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_rank = {executor.submit(train_candidate_worker, args): i for i, args in enumerate(trial_args)}
-        
-        progress_iterator = tqdm(as_completed(future_to_rank), total=len(top_trials), desc=f"Retraining Top Candidates ({sample_fraction*100:.0f}% data)")
-        
+        future_to_rank = {
+            executor.submit(train_candidate_worker, args): i
+            for i, args in enumerate(trial_args)
+        }
+
+        progress_iterator = tqdm(
+            as_completed(future_to_rank),
+            total=len(top_trials),
+            desc=f"Retraining Top Candidates ({sample_fraction * 100:.0f}% data)",
+        )
+
         for future in progress_iterator:
             try:
                 result = future.result()
                 candidate_info.append(result)
-                trained_models[result['model_key']] = result['model_state']
+                trained_models[result["model_key"]] = result["model_state"]
             except Exception as e:
                 rank = future_to_rank[future] + 1
                 progress_iterator.write(f"✗ Failed to train candidate {rank}: {e}")
 
-    candidate_info.sort(key=lambda x: x['rank'])
-    
+    candidate_info.sort(key=lambda x: x["rank"])
+
     if candidate_info:
         plot_combined_training_histories(
             candidate_info=candidate_info,
             output_dir=str(output_plot_dir),
             model_name=model_name_suffix,
-            subtitle=generate_subtitle_from_config(data_config_dict)
+            subtitle=generate_subtitle_from_config(data_config_dict),
         )
         print(f"Saved combined training history plot to: {output_plot_dir}")
-
 
     # --- User selection ---
     if not candidate_info:
@@ -540,13 +654,19 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
 
     selected_trial = None
     if non_interactive:
-        print("\n--- Non-interactive mode: Automatically selecting Rank 1 candidate ---")
+        print(
+            "\n--- Non-interactive mode: Automatically selecting Rank 1 candidate ---"
+        )
         if candidate_info:
             selected_candidate_info = candidate_info[0]
-            trial_number_to_find = selected_candidate_info['trial_number']
-            selected_trial = next((t for t in top_trials if t.number == trial_number_to_find), None)
+            trial_number_to_find = selected_candidate_info["trial_number"]
+            selected_trial = next(
+                (t for t in top_trials if t.number == trial_number_to_find), None
+            )
             if selected_trial:
-                print(f"Automatically selected Rank 1 (Trial #{selected_trial.number}).")
+                print(
+                    f"Automatically selected Rank 1 (Trial #{selected_trial.number})."
+                )
             else:
                 print("Error: Could not find trial details for Rank 1 candidate.")
                 return
@@ -557,19 +677,28 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         # interactive loop
         while not selected_trial:
             try:
-                choice_str = input(f"\nEnter the Rank of the trial to use (1-{len(candidate_info)}): ")
+                choice_str = input(
+                    f"\nEnter the Rank of the trial to use (1-{len(candidate_info)}): "
+                )
                 choice_idx = int(choice_str) - 1
                 if 0 <= choice_idx < len(candidate_info):
                     selected_candidate_info = candidate_info[choice_idx]
-                    trial_number_to_find = selected_candidate_info['trial_number']
-                    selected_trial = next((t for t in top_trials if t.number == trial_number_to_find), None)
+                    trial_number_to_find = selected_candidate_info["trial_number"]
+                    selected_trial = next(
+                        (t for t in top_trials if t.number == trial_number_to_find),
+                        None,
+                    )
                     if selected_trial:
-                        print(f"You selected Rank {choice_str} (Trial #{selected_trial.number}).")
+                        print(
+                            f"You selected Rank {choice_str} (Trial #{selected_trial.number})."
+                        )
                         break
                     else:
                         print(f"Error: Could not find trial for rank {choice_str}.")
                 else:
-                    print(f"Invalid rank. Please enter a number between 1 and {len(candidate_info)}.")
+                    print(
+                        f"Invalid rank. Please enter a number between 1 and {len(candidate_info)}."
+                    )
             except (ValueError, IndexError):
                 print("Invalid input. Please enter a number from the list.")
             except (KeyboardInterrupt, EOFError):
@@ -586,23 +715,25 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     target_column = "target"
     X_full = full_data.drop(columns=[target_column])
     y_full = full_data[target_column]
-    
+
     print(f"Full dataset for final training contains: {len(X_full)} samples.")
-    
+
     final_params = selected_trial.params
     best_epoch_for_final_run = selected_trial.user_attrs.get("best_epoch")
     if not best_epoch_for_final_run:
-        print(f"Warning: 'best_epoch' not found in Trial #{selected_trial.number}. Falling back to the full number of epochs from the trial's parameters.")
+        print(
+            f"Warning: 'best_epoch' not found in Trial #{selected_trial.number}. Falling back to the full number of epochs from the trial's parameters."
+        )
         epochs_for_final_run = final_params["epochs"]
     else:
         epochs_for_final_run = best_epoch_for_final_run
         print(f"Using optimal epoch number from tuning: {epochs_for_final_run} epochs.")
 
-    
     model_name_arch = tuning_config.get("model_name", "mlp_001")
     ARCH_PARAMS = {"mlp_001": {"hidden_size"}}
     model_params = {
-        key: final_params[key] for key in final_params
+        key: final_params[key]
+        for key in final_params
         if key in ARCH_PARAMS.get(model_name_arch, set())
     }
     model_params["input_size"] = X_full.shape[1]
@@ -610,9 +741,13 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     final_model = get_model(model_name_arch, model_params)
 
     full_train_dataset = TabularDataset(X_full, y_full)
-    full_train_loader = DataLoader(dataset=full_train_dataset, batch_size=final_params["batch_size"], shuffle=True)
-    
-    final_optimiser = torch.optim.Adam(final_model.parameters(), lr=final_params["learning_rate"])
+    full_train_loader = DataLoader(
+        dataset=full_train_dataset, batch_size=final_params["batch_size"], shuffle=True
+    )
+
+    final_optimiser = torch.optim.Adam(
+        final_model.parameters(), lr=final_params["learning_rate"]
+    )
 
     final_model, final_history, _ = train_model(
         model=final_model,
@@ -624,15 +759,21 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         device=device,
         verbose=True,
         scheduler=None,
-        early_stopping_enabled=False
+        early_stopping_enabled=False,
     )
     print("✓ Final model training complete!")
-    
+
     # --- Visualisations ---
     plot_subtitle = generate_subtitle_from_config(data_config_dict)
     model_name_vis = tuning_config.get("model_name", "model")
     family_base_vis = extract_family_base(dataset_base_name)
-    tuning_output_plot_dir = project_root / "reports" / "figures" / family_base_vis / f"{model_name_vis}_tuning"
+    tuning_output_plot_dir = (
+        project_root
+        / "reports"
+        / "figures"
+        / family_base_vis
+        / f"{model_name_vis}_tuning"
+    )
     os.makedirs(tuning_output_plot_dir, exist_ok=True)
 
     print(f"\nSaving tuning analysis plots to: {tuning_output_plot_dir}")
@@ -645,9 +786,12 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
     main_title = "Optimisation History (Validation Loss)"
     full_title = f"{main_title}\n{plot_subtitle}"
     plt.suptitle(full_title, y=0.95)
-    plt.legend(loc='upper right')
+    plt.legend(loc="upper right")
     plt.tight_layout(rect=[0, 0, 1, 0.92])
-    plt.savefig(tuning_output_plot_dir / "tuning_optimisation_history_loss.pdf", bbox_inches='tight')
+    plt.savefig(
+        tuning_output_plot_dir / "tuning_optimisation_history_loss.pdf",
+        bbox_inches="tight",
+    )
     plt.close()
 
     # Plot Parameter Importances
@@ -660,32 +804,43 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         full_title = f"{main_title}\n{plot_subtitle}"
         plt.suptitle(full_title, y=0.95)
         plt.tight_layout(rect=[0, 0.0, 1, 0.92])
-        plt.savefig(tuning_output_plot_dir / "tuning_param_importances_loss.pdf", bbox_inches='tight')
+        plt.savefig(
+            tuning_output_plot_dir / "tuning_param_importances_loss.pdf",
+            bbox_inches="tight",
+        )
         plt.close()
     except Exception:
         print("Warning: Could not generate parameter importance plot.")
-        
+
     # --- Write Final Training Config ---
-    def create_and_save_optimal_config(best_params, final_data_config_path, base_training_config_path, tuning_config, best_trial_number):
-        with open(base_training_config_path, 'r') as f:
+    def create_and_save_optimal_config(
+        best_params,
+        final_data_config_path,
+        base_training_config_path,
+        tuning_config,
+        best_trial_number,
+    ):
+        with open(base_training_config_path, "r") as f:
             config_template = yaml.safe_load(f)
 
-        if 'model_name' in tuning_config:
-            config_template['training_settings']['model_name'] = tuning_config['model_name']
+        if "model_name" in tuning_config:
+            config_template["training_settings"]["model_name"] = tuning_config[
+                "model_name"
+            ]
 
-        config_template['training_settings']['hyperparameters'].update(best_params)
-        config_template['training_settings']['optimal_trial_number'] = best_trial_number
-        
+        config_template["training_settings"]["hyperparameters"].update(best_params)
+        config_template["training_settings"]["optimal_trial_number"] = best_trial_number
+
         final_data_config = data_utils.load_yaml_config(final_data_config_path)
         dataset_base_name = data_utils.create_filename_from_config(final_data_config)
         training_suffix = Path(base_training_config_path).stem
-        
+
         new_config_filename = f"{dataset_base_name}_{training_suffix}_optimal.yml"
         save_dir = project_root / "configs" / "training" / "generated"
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / new_config_filename
 
-        with open(save_path, 'w') as f:
+        with open(save_path, "w") as f:
             yaml.dump(config_template, f, default_flow_style=False, sort_keys=False)
         print(f"\nOptimal training configuration saved to: {save_path}")
         return save_path
@@ -695,27 +850,37 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         final_data_config_path=str(data_config_path),
         base_training_config_path=str(base_training_config_path),
         tuning_config=tuning_config,
-        best_trial_number=selected_trial.number
+        best_trial_number=selected_trial.number,
     )
 
     # --- Save the final model ---
     model_output_dir = project_root / "models"
-    final_model_path = model_output_dir / f"{dataset_base_name}_{model_name_vis}_optimal_model.pt"
+    final_model_path = (
+        model_output_dir / f"{dataset_base_name}_{model_name_vis}_optimal_model.pt"
+    )
     torch.save(final_model.state_dict(), final_model_path)
     print(f"Final model (trained on full data) saved to: {final_model_path}")
 
     # --- Print next steps ---
     family_base = extract_family_base(dataset_base_name)
-    eval_data_config_path = project_root / "configs" / "data_generation" / f"{family_base}_seed0_config.yml"
-    print("\n" + "="*80)
+    eval_data_config_path = (
+        project_root / "configs" / "data_generation" / f"{family_base}_seed0_config.yml"
+    )
+    print("\n" + "=" * 80)
     print("Next Steps: Train your final model and evaluate it on all seeds")
-    print("="*80)
-    
-    print("\nNOTE: The final model has already been trained on the full dataset and saved.")
+    print("=" * 80)
+
+    print(
+        "\nNOTE: The final model has already been trained on the full dataset and saved."
+    )
     print("You can now proceed directly to evaluation.")
 
-    print("\nSTEP 1: Evaluate the single trained model against all evaluation datasets (seeds 0-9).")
-    print("---------------------------------------------------------------------------------------")
+    print(
+        "\nSTEP 1: Evaluate the single trained model against all evaluation datasets (seeds 0-9)."
+    )
+    print(
+        "---------------------------------------------------------------------------------------"
+    )
     eval_command = (
         f"uv run experiment_manager.py evaluate-multiseed \\\n"
         f" --trained-model {final_model_path} \\\n"
@@ -723,4 +888,4 @@ def run_tuning_analysis(data_config: str, base_training_config: str, sample_frac
         f" --optimal-config {optimal_config_path}"
     )
     print(eval_command)
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)

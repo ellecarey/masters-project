@@ -9,6 +9,7 @@ from src.utils.plotting_helpers import generate_subtitle_from_config
 
 TRAINING_SEED = 99
 
+
 def find_project_root():
     """Find the project root by searching upwards for a marker file."""
     # Start from the directory of this file (__file__).
@@ -70,24 +71,25 @@ def create_filename_from_config(config):
     signal_features = class_config.get("signal_features", {})
     noise_features = class_config.get("noise_features", {})
     separations = [
-        abs(signal_features[f]['mean'] - noise_features.get(f, {}).get('mean', 0))
-        for f in signal_features if f in noise_features
+        abs(signal_features[f]["mean"] - noise_features.get(f, {}).get("mean", 0))
+        for f in signal_features
+        if f in noise_features
     ]
     separations = []
     for f_name, s_params in signal_features.items():
         if f_name in noise_features:
             n_params = noise_features[f_name]
-            mean_diff = abs(s_params.get('mean', 0) - n_params.get('mean', 0))
-            s_std = s_params.get('std', 1)
-            n_std = n_params.get('std', 1)
+            mean_diff = abs(s_params.get("mean", 0) - n_params.get("mean", 0))
+            s_std = s_params.get("std", 1)
+            n_std = n_params.get("std", 1)
             # Prevent division by zero if stds are missing or zero
             if (s_std**2 + n_std**2) > 0:
                 # Standardized separation for one feature
-                d = mean_diff / ((s_std**2 + n_std**2)**0.5)
+                d = mean_diff / ((s_std**2 + n_std**2) ** 0.5)
                 separations.append(d)
 
     # Combine individual separations into one overall metric (root sum square)
-    overall_separation = (sum(d**2 for d in separations))**0.5 if separations else 0.0
+    overall_separation = (sum(d**2 for d in separations)) ** 0.5 if separations else 0.0
     random_seed = global_settings.get("random_seed", 42)
 
     name_parts = [
@@ -95,46 +97,58 @@ def create_filename_from_config(config):
         f"f_init{n_features}",
         f"cont{continuous_count}",
         f"disc{discrete_count}",
-        f"sep{str(round(overall_separation, 1)).replace('.', 'p')}"
+        f"sep{str(round(overall_separation, 1)).replace('.', 'p')}",
     ]
 
     if perturbations:
         pert_str_parts = []
         for p in perturbations:
-            class_str = "n" if p['class_label'] == 0 else "s"
-            
+            class_str = "n" if p["class_label"] == 0 else "s"
+
             # Handle different perturbation types
-            pert_type = p.get('type', 'individual')
-            
-            if pert_type == 'correlated':
+            pert_type = p.get("type", "individual")
+
+            if pert_type == "correlated":
                 # Handle correlated perturbations
-                features = p.get('features', [])
+                features = p.get("features", [])
                 if len(features) <= 2:
-                    feature_str = ''.join([f.split('_')[-1] for f in features])
+                    feature_str = "".join([f.split("_")[-1] for f in features])
                 else:
                     feature_str = f"{len(features)}f"
-                
-                if 'scale_factor' in p:
-                    scale_val = str(p['scale_factor']).replace('.', 'p')
-                    pert_str_parts.append(f"pert_corr{feature_str}{class_str}_scale{scale_val}")
-                elif 'sigma_shift' in p:
-                    shift_val = str(p['sigma_shift']).replace('.', 'p')
-                    pert_str_parts.append(f"pert_corr{feature_str}{class_str}_by{shift_val}s")
+
+                if "scale_factor" in p:
+                    scale_val = str(p["scale_factor"]).replace(".", "p")
+                    pert_str_parts.append(
+                        f"pert_corr{feature_str}{class_str}_scale{scale_val}"
+                    )
+                elif "sigma_shift" in p:
+                    shift_val = str(p["sigma_shift"]).replace(".", "p")
+                    pert_str_parts.append(
+                        f"pert_corr{feature_str}{class_str}_by{shift_val}s"
+                    )
             else:
                 # Handle individual perturbations (existing code)
-                feature_index = p['feature'].split('_')[-1]
-                if 'scale_factor' in p:
-                    scale_val = str(p['scale_factor']).replace('.', 'p')
-                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_scale{scale_val}")
-                elif 'sigma_shift' in p:
-                    shift_val = str(p['sigma_shift']).replace('.', 'p')
-                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_by{shift_val}s")
-                elif 'additive_noise' in p:
-                    noise_val = str(p['additive_noise']).replace('.', 'p')
-                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_noise{noise_val}")
-                elif 'multiplicative_factor' in p:
-                    mult_val = str(p['multiplicative_factor']).replace('.', 'p')
-                    pert_str_parts.append(f"pert_f{feature_index}{class_str}_mult{mult_val}")
+                feature_index = p["feature"].split("_")[-1]
+                if "scale_factor" in p:
+                    scale_val = str(p["scale_factor"]).replace(".", "p")
+                    pert_str_parts.append(
+                        f"pert_f{feature_index}{class_str}_scale{scale_val}"
+                    )
+                elif "sigma_shift" in p:
+                    shift_val = str(p["sigma_shift"]).replace(".", "p")
+                    pert_str_parts.append(
+                        f"pert_f{feature_index}{class_str}_by{shift_val}s"
+                    )
+                elif "additive_noise" in p:
+                    noise_val = str(p["additive_noise"]).replace(".", "p")
+                    pert_str_parts.append(
+                        f"pert_f{feature_index}{class_str}_noise{noise_val}"
+                    )
+                elif "multiplicative_factor" in p:
+                    mult_val = str(p["multiplicative_factor"]).replace(".", "p")
+                    pert_str_parts.append(
+                        f"pert_f{feature_index}{class_str}_mult{mult_val}"
+                    )
 
         name_parts.append("_".join(pert_str_parts))
 
@@ -151,6 +165,7 @@ def create_plot_title_from_config(config: dict) -> tuple[str, str]:
     main_title = "Distribution of Generated Features"
     subtitle = generate_subtitle_from_config(config)
     return main_title, subtitle
+
 
 def rename_config_file(original_config_path, experiment_name):
     """
