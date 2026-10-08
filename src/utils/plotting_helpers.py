@@ -1,6 +1,5 @@
 import numpy as np
 import textwrap
-import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from adjustText import adjust_text
 
@@ -9,6 +8,8 @@ def generate_subtitle_from_config(config: dict) -> str:
     """
     Generates a detailed, human-readable subtitle from a configuration dictionary.
     """
+    from src.data_generator_module.separability import calculate_separability
+
     try:
         ds_settings = config.get("dataset_settings", {})
         n_samples = ds_settings.get("n_samples")
@@ -29,23 +30,7 @@ def generate_subtitle_from_config(config: dict) -> str:
         pert_settings = config.get("perturbation_settings")
         pert_desc = _process_perturbation_settings(pert_settings)
 
-        signal_features = class_config.get("signal_features", {})
-        noise_features = class_config.get("noise_features", {})
-
-        separations = []
-        for f_name, s_params in signal_features.items():
-            if f_name in noise_features:
-                n_params = noise_features[f_name]
-                mean_diff = abs(s_params.get("mean", 0) - n_params.get("mean", 0))
-                s_std = s_params.get("std", 1)
-                n_std = n_params.get("std", 1)
-                if (s_std**2 + n_std**2) > 0:
-                    d = mean_diff / ((s_std**2 + n_std**2) ** 0.5)
-                    separations.append(d)
-
-        overall_separation = (
-            (sum(d**2 for d in separations)) ** 0.5 if separations else 0.0
-        )
+        overall_separation = calculate_separability(config)
         separation_desc = f"Std. Separation: {overall_separation:.2f}"
 
         subtitle = (

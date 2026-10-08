@@ -4,8 +4,8 @@ from pathlib import Path
 import yaml
 import random
 import numpy as np
-import re
 from src.utils.plotting_helpers import generate_subtitle_from_config
+from src.data_generator_module.separability import calculate_separability
 
 TRAINING_SEED = 99
 
@@ -68,28 +68,7 @@ def create_filename_from_config(config):
     feature_types = class_config.get("feature_types", {})
     continuous_count = sum(1 for ft in feature_types.values() if ft == "continuous")
     discrete_count = sum(1 for ft in feature_types.values() if ft == "discrete")
-    signal_features = class_config.get("signal_features", {})
-    noise_features = class_config.get("noise_features", {})
-    separations = [
-        abs(signal_features[f]["mean"] - noise_features.get(f, {}).get("mean", 0))
-        for f in signal_features
-        if f in noise_features
-    ]
-    separations = []
-    for f_name, s_params in signal_features.items():
-        if f_name in noise_features:
-            n_params = noise_features[f_name]
-            mean_diff = abs(s_params.get("mean", 0) - n_params.get("mean", 0))
-            s_std = s_params.get("std", 1)
-            n_std = n_params.get("std", 1)
-            # Prevent division by zero if stds are missing or zero
-            if (s_std**2 + n_std**2) > 0:
-                # Standardized separation for one feature
-                d = mean_diff / ((s_std**2 + n_std**2) ** 0.5)
-                separations.append(d)
-
-    # Combine individual separations into one overall metric (root sum square)
-    overall_separation = (sum(d**2 for d in separations)) ** 0.5 if separations else 0.0
+    overall_separation = calculate_separability(config)
     random_seed = global_settings.get("random_seed", 42)
 
     name_parts = [
