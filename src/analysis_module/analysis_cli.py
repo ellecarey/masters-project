@@ -195,8 +195,6 @@ def aggregate_all_families(optimal_config: str):
         return
     project_root = Path(find_project_root())
     models_dir = project_root / "models"
-    configs_gen_dir = project_root / "configs/training/generated"
-    orig_base_name = orig_opt_path.stem
     base_prefix_match = re.match(
         r"^(n\d+_f_init\d+_cont\d+_disc\d+_sep[\d_p]+)", orig_opt_path.stem
     )
@@ -209,7 +207,6 @@ def aggregate_all_families(optimal_config: str):
     if not model_suffix_match:
         print(f"Error: Could not determine model suffix from '{orig_opt_path.name}'")
         return
-    model_suffix = model_suffix_match.group(1)
     print(f"Scanning for experiment families with base: {base_prefix}")
     all_metric_files = list(models_dir.glob(f"{base_prefix}*_metrics.json"))
     if not all_metric_files:
@@ -245,11 +242,8 @@ def aggregate_all_families(optimal_config: str):
         print(f"\n{'=' * 80}")
         print(f"Generating comparison plots for: {perturbation_tag}")
         print("=" * 80 + "\n")
-        original_family_optimal_config = (
-            configs_gen_dir / f"{base_prefix}_seed0{model_suffix}.yml"
-        )
         compare_families(
-            original_optimal_config=str(original_family_optimal_config),
+            original_optimal_config=str(orig_opt_path),
             perturbation_tag=perturbation_tag,
         )
 

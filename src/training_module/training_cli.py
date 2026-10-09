@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 import torch.nn as nn
-import re
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -20,7 +19,12 @@ from src.training_module.models import get_model
 from src.training_module.dataset import TabularDataset
 from torch.utils.data import DataLoader
 from src.training_module.trainer import train_model
-from src.utils.filenames import experiment_name, metrics_filename, model_filename
+from src.utils.filenames import (
+    experiment_name,
+    metrics_filename,
+    model_filename,
+    parse_experiment_name,
+)
 from src.utils.plotting_helpers import generate_subtitle_from_config
 from src.utils.dataset_lifecycle import (
     EvaluatedDataset,
@@ -264,16 +268,14 @@ def evaluate_single_config(
 
     # --- Derive Experiment Name for Output Metrics
     full_base = data_utils.create_filename_from_config(data_config)
-    regex = r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)$"
-    m = re.match(regex, full_base)
-    if not m:
-        # Fallback for the training file itself if it's evaluated by mistake
-        if "_training" in full_base:
-            print(f"Skipping evaluation on training file: {full_base}")
-            return
+    try:
+        parsed = parse_experiment_name(full_base)
+    except ValueError:
         raise ValueError(f"Could not parse base/pert/seed from {full_base}")
-    base, pert_tag, seed_str = m.group("base"), m.group("pert"), m.group("seed")
-    seed = int(seed_str)
+    if parsed.seed is None:
+        print(f"Skipping evaluation on training file: {full_base}")
+        return
+    base, pert_tag, seed = parsed.base, parsed.perturbation_tag, parsed.seed
 
     project_root = Path(data_utils.find_project_root())
     model_output_dir = project_root / train_settings["model_output_dir"]
@@ -369,8 +371,11 @@ def evaluate_single_config(
 
 
 def evaluate_multi_seed(
-    trained_model_path: str, data_config_base: str, optimal_config: str,
-    *, config_paths=None,
+    trained_model_path: str,
+    data_config_base: str,
+    optimal_config: str,
+    *,
+    config_paths=None,
 ):
     """
     Evaluates a single pre-trained model over a multi-seed dataset family.
@@ -426,29 +431,25 @@ def evaluate_multi_seed(
         current_data_config = data_utils.load_yaml_config(data_config_path)
         full_base = data_utils.create_filename_from_config(current_data_config)
         if full_base.endswith("_training"):
-            raise ValueError(f"Training dataset cannot be evaluated as a seed: {data_config_path}")
-
-        # Replicate logic from evaluate_single_config to find the metrics file path
-        regex = r"(?P<base>.+?)(?:_(?P<pert>pert_[^_]+))?_seed(?P<seed>\d+)$"
-        m = re.match(regex, full_base)
-
-        if not m:
-            raise ValueError(f"Cannot parse evaluation dataset name: {full_base}")
-        else:
-            base, pert_tag, seed_str = m.group("base"), m.group("pert"), m.group("seed")
-            seed = int(seed_str)
-
-            metrics_filepath = model_output_dir / metrics_filename(
-                base, model_name, seed=seed, perturbation_tag=pert_tag, optimized=False
+            raise ValueError(
+                f"Training dataset cannot be evaluated as a seed: {data_config_path}"
             )
 
-            # Check if the metrics file already exists
-            if metrics_filepath.exists():
-                validate_metrics(metrics_filepath)
-                print(
-                    f"Skipping evaluation for {data_config_path.name}, metrics file already exists at '{metrics_filepath.name}'."
-                )
-                continue
+        # Replicate logic from evaluate_single_config to find the metrics file path
+        parsed = parse_experiment_name(full_base)
+        base, pert_tag, seed = parsed.base, parsed.perturbation_tag, parsed.seed
+
+        metrics_filepath = model_output_dir / metrics_filename(
+            base, model_name, seed=seed, perturbation_tag=pert_tag, optimized=False
+        )
+
+        # Check if the metrics file already exists
+        if metrics_filepath.exists():
+            validate_metrics(metrics_filepath)
+            print(
+                f"Skipping evaluation for {data_config_path.name}, metrics file already exists at '{metrics_filepath.name}'."
+            )
+            continue
 
         # If metrics file doesn't exist, run the evaluation
         csv_path = dataset_path(project_root, current_data_config, full_base)
@@ -457,7 +458,9 @@ def evaluate_multi_seed(
             trained_model_path, str(data_config_path), str(optimal_config_path)
         )
         if result is None or Path(result) != metrics_filepath:
-            raise RuntimeError(f"Evaluation did not confirm saved metrics: {data_config_path}")
+            raise RuntimeError(
+                f"Evaluation did not confirm saved metrics: {data_config_path}"
+            )
         validate_metrics(metrics_filepath)
         if file_stamp(csv_path) != before:
             raise RuntimeError(f"Dataset changed during evaluation: {csv_path}")
