@@ -40,7 +40,7 @@ The working system is a YAML-driven **generate → tune/train → evaluate → a
    ```bash
    pytest
    ```
-   *Tests live under `src/data_generator_module/tests` and `src/training_module/tests`.*
+   *Tests live under `src/data_generator_module/tests`, `src/training_module/tests`, `src/analysis_module/tests`, and `src/utils/tests`.*
 
 ---
 
